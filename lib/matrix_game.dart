@@ -47,7 +47,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   int startMs = 0;
 
   Timer? _gameTimer;
-  int remainingSeconds = 30;
+  int remainingSeconds = 45;
 
   @override
   void initState() {
