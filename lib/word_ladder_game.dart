@@ -259,7 +259,7 @@ class _WordLadderGameState extends State<WordLadderGame> {
       return Text(
         item.question,
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 48, height: 1.2),
+        style: const TextStyle(fontSize: 40, height: 1.2),
       );
     }
   }
