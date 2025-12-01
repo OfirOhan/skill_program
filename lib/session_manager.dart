@@ -10,6 +10,8 @@ import 'word_ladder_game.dart'; // Game 4
 import 'brick_game.dart';       // Game 5
 import 'split_tap_game.dart';
 import 'logic_blocks_game.dart';
+import 'chart_game.dart';
+import 'spin_game.dart';
 
 
 class SessionManager extends StatefulWidget {
@@ -39,6 +41,8 @@ class _SessionManagerState extends State<SessionManager> {
     const BrickGame(),          // 5. Brick Uses
     const SplitTapGame(),
     const LogicBlocksGame(),
+    const ChartDashGame(),
+    const SpinGame(),
   ];
 
   final List<String> gameIds = [
@@ -49,6 +53,8 @@ class _SessionManagerState extends State<SessionManager> {
     "brick_uses",
     "split_tap",
     "logic_blocks",
+    "chart_dash",
+    "3d_spin",
   ];
 
   @override

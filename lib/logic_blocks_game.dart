@@ -11,20 +11,16 @@ class LogicBlocksGame extends StatefulWidget {
 }
 
 class _LogicBlocksGameState extends State<LogicBlocksGame> {
-  // Game State
   late List<List<PipeTile>> grid;
   int gridSize = 3;
   bool isGameOver = false;
 
-  // Game Config
   static const int totalLevels = 3;
   int currentLevelIndex = 0;
 
-  // Timer
   Timer? _levelTimer;
-  int remainingSeconds = 15; // Start value
+  int remainingSeconds = 15; // Fixed 15s start
 
-  // Metrics
   int levelsSolved = 0;
   int moves = 0;
 
@@ -41,7 +37,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _startTimer() {
-    remainingSeconds = 15; // STRICT 15 SECONDS PER LEVEL
+    remainingSeconds = 15; // FORCE 15 SECONDS PER ROUND
     _levelTimer?.cancel();
     _levelTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
@@ -81,15 +77,13 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
       return;
     }
 
-    // Difficulty scaling (Grid Size increases, Time stays 15s)
+    // Difficulty scaling (Size increases, Time stays 15s)
     if (currentLevelIndex == 0) gridSize = 3;
     else if (currentLevelIndex == 1) gridSize = 4;
     else gridSize = 6; // Expert Size
 
-    // Use the Maze Generator for guaranteed complexity
     grid = _generateMazeGrid(gridSize);
 
-    // Scramble logic
     final rand = Random();
     for (var row in grid) {
       for (var tile in row) {
@@ -99,8 +93,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
         }
       }
     }
+
     _checkFlow();
-    _startTimer(); // Always 15 seconds
+    _startTimer();
   }
 
   void _onTileTap(int r, int c) {
@@ -146,32 +141,35 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     }
 
     if (reachedEnd) {
-      _levelTimer?.cancel();
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("FLOW STABLE!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
-      );
-
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) {
-          setState(() {
-            levelsSolved++;
-            currentLevelIndex++;
-            _startLevel();
-          });
-        }
-      });
+      _triggerWin();
     }
+  }
+
+  void _triggerWin() {
+    _levelTimer?.cancel();
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("FLOW STABLE!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
+    );
+
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          levelsSolved++;
+          currentLevelIndex++;
+          _startLevel();
+        });
+      }
+    });
   }
 
   bool _isConnected(PipeTile curr, PipeTile next, Point currP, Point nextP) {
     int dirToNext = 0;
-    if (nextP.x > currP.x) dirToNext = 2; // Down
-    if (nextP.x < currP.x) dirToNext = 0; // Up
-    if (nextP.y > currP.y) dirToNext = 1; // Right
-    if (nextP.y < currP.y) dirToNext = 3; // Left
+    if (nextP.x > currP.x) dirToNext = 2;
+    if (nextP.x < currP.x) dirToNext = 0;
+    if (nextP.y > currP.y) dirToNext = 1;
+    if (nextP.y < currP.y) dirToNext = 3;
 
     if (!curr.hasOpening(dirToNext)) return false;
-
     int dirFromPrev = (dirToNext + 2) % 4;
     if (!next.hasOpening(dirFromPrev)) return false;
 
@@ -180,8 +178,8 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
 
   Map<String, double> grade() {
     double completion = levelsSolved / totalLevels.toDouble();
-    // Efficiency calculation adjusted for high speed
-    double efficiency = levelsSolved == 0 ? 0.0 : (1.0 - (moves / (levelsSolved * 20))).clamp(0.0, 1.0);
+    // Efficiency calculation adjusted for high speed play
+    double efficiency = levelsSolved == 0 ? 0.0 : (1.0 - (moves / (levelsSolved * 25))).clamp(0.0, 1.0);
 
     return {
       "Programming Logic": completion,
@@ -191,7 +189,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
       "Technical Documentation Understanding": 0.5,
       "Problem Decomposition": completion,
       "Planning & Prioritization": efficiency,
-      "Decision-Making Under Pressure": completion, // High score here relies on speed
+      "Decision-Making Under Pressure": completion,
     };
   }
 
@@ -248,7 +246,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
             padding: const EdgeInsets.all(16),
             color: Colors.blue[50],
             width: double.infinity,
-            child: const Text("Connect BLUE to GREEN.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            child: const Text("Connect the BLUE source to the GREEN drain.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
           ),
           Expanded(
             child: Center(
@@ -300,7 +298,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
         ),
         child: AnimatedRotation(
           turns: tile.rotation * 0.25,
-          duration: const Duration(milliseconds: 100), // Faster animation for speed play
+          duration: const Duration(milliseconds: 100),
           child: CustomPaint(
             painter: PipePainter(tile.type, pipeColor, isStart, isEnd, tile.hasFlow),
           ),
@@ -332,7 +330,7 @@ class PipeTile {
   }
 }
 
-// --- MAZE GENERATOR (Depth-First Search) ---
+// --- MAZE GENERATOR (DFS for complexity) ---
 List<List<PipeTile>> _generateMazeGrid(int size) {
   var g = List.generate(size, (_) => List.generate(size, (_) => PipeTile(type: PipeType.empty)));
 
@@ -346,10 +344,10 @@ List<List<PipeTile>> _generateMazeGrid(int size) {
   while (stack.isNotEmpty) {
     Point<int> current = stack.last;
     List<int> neighbors = [];
-    if (current.x > 0 && !visited[current.x - 1][current.y]) neighbors.add(0); // Up
-    if (current.y < size - 1 && !visited[current.x][current.y + 1]) neighbors.add(1); // Right
-    if (current.x < size - 1 && !visited[current.x + 1][current.y]) neighbors.add(2); // Down
-    if (current.y > 0 && !visited[current.x][current.y - 1]) neighbors.add(3); // Left
+    if (current.x > 0 && !visited[current.x - 1][current.y]) neighbors.add(0);
+    if (current.y < size - 1 && !visited[current.x][current.y + 1]) neighbors.add(1);
+    if (current.x < size - 1 && !visited[current.x + 1][current.y]) neighbors.add(2);
+    if (current.y > 0 && !visited[current.x][current.y - 1]) neighbors.add(3);
 
     if (neighbors.isNotEmpty) {
       int dir = neighbors[rand.nextInt(neighbors.length)];
@@ -371,15 +369,13 @@ List<List<PipeTile>> _generateMazeGrid(int size) {
       var conn = connections[r][c];
       int count = conn.where((b) => b).length;
 
-      if (count == 1) g[r][c].type = PipeType.elbow; // Cap -> Elbow for visual trickery
+      if (count == 1) g[r][c].type = PipeType.elbow;
       else if (count == 2) {
         if ((conn[0] && conn[2]) || (conn[1] && conn[3])) g[r][c].type = PipeType.straight;
         else g[r][c].type = PipeType.elbow;
       } else if (count == 3) g[r][c].type = PipeType.tee;
       else g[r][c].type = PipeType.cross;
 
-      // Random Noise: Convert simple pipes to complex ones to create "False Paths"
-      // This forces the user to verify connections rather than just "fill the blank"
       if (count < 4 && rand.nextDouble() < 0.3) {
         if (g[r][c].type == PipeType.straight) g[r][c].type = PipeType.tee;
         else if (g[r][c].type == PipeType.elbow) g[r][c].type = PipeType.tee;

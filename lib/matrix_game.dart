@@ -306,11 +306,12 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     if (shape.shape == ShapeType.none) return const SizedBox();
 
     IconData icon;
+    // MODIFIED FOR VISIBILITY: Shorter, Bolder lines that fit INSIDE shapes
     if ([ShapeType.lineVert, ShapeType.lineHorz, ShapeType.lineDiagF, ShapeType.lineDiagB].contains(shape.shape)) {
-      double w = 2.5;
-      double h = size;
+      double w = 4.0; // Bolder
+      double h = size * 0.8; // Shorter (80% of container)
       double rotation = 0.0;
-      if (shape.shape == ShapeType.lineHorz) { w = size; h = 2.5; }
+      if (shape.shape == ShapeType.lineHorz) { w = size * 0.8; h = 4.0; }
       if (shape.shape == ShapeType.lineDiagF) rotation = 0.125;
       if (shape.shape == ShapeType.lineDiagB) rotation = -0.125;
 
@@ -337,7 +338,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       switch (shape.shape) {
         case ShapeType.square: icon = Icons.square_rounded; break;
         case ShapeType.circle: icon = Icons.circle; break;
-        case ShapeType.triangle: icon = Icons.change_history; break;
+        case ShapeType.triangle: icon = Icons.change_history; break; // Solid triangle approx
         case ShapeType.diamond: icon = Icons.diamond; break;
         case ShapeType.arrow: icon = Icons.arrow_upward_rounded; break;
         case ShapeType.star: icon = Icons.star_rounded; break;
@@ -381,6 +382,7 @@ class VisualMatrixItem {
   VisualMatrixItem({required this.difficulty, required this.gridSize, required this.logicDescription, required this.grid, required this.options, required this.correctIndex});
 }
 
+// --- FIXED GENERATOR LOGIC ---
 List<VisualMatrixItem> _generateVisualItems() {
   return [
     VisualMatrixItem(
@@ -440,17 +442,17 @@ List<VisualMatrixItem> _generateVisualItems() {
           [MatrixShape(shape: ShapeType.square, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.circle, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.circle, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
+          [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
+          [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
+          [MatrixShape(shape: ShapeType.circle, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
+          [MatrixShape(shape: ShapeType.circle, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
         ],
         options: [
           [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)], // Correct
+          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)], // Correct
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
+          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.square, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
         ],
