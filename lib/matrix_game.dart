@@ -46,46 +46,64 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   int correctRaw = 0;
   int startMs = 0;
 
-  Timer? _gameTimer;
-  int remainingSeconds = 45;
+  // Timer
+  Timer? _roundTimer;
+  int remainingSeconds = 15;
 
   @override
   void initState() {
     super.initState();
     items = _generateVisualItems();
-    startMs = DateTime.now().millisecondsSinceEpoch;
-    _startGameTimer();
+    _startRound();
   }
 
   @override
   void dispose() {
-    _gameTimer?.cancel();
+    _roundTimer?.cancel();
     super.dispose();
   }
 
-  void _startGameTimer() {
-    _gameTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      setState(() => remainingSeconds--);
-      if (remainingSeconds <= 0) _finishGame();
-    });
-  }
-
-  void _finishGame() {
-    _gameTimer?.cancel();
-    setState(() => isGameOver = true);
-  }
-
-  void next() {
-    if (index >= items.length - 1) {
+  void _startRound() {
+    if (index >= items.length) {
       _finishGame();
       return;
     }
-    startMs = DateTime.now().millisecondsSinceEpoch;
+
+    setState(() {
+      remainingSeconds = 15; // Reset timer for new question
+      startMs = DateTime.now().millisecondsSinceEpoch;
+    });
+
+    _roundTimer?.cancel();
+    _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      setState(() => remainingSeconds--);
+      if (remainingSeconds <= 0) {
+        _handleTimeout();
+      }
+    });
+  }
+
+  void _handleTimeout() {
+    _roundTimer?.cancel();
+    // Count as wrong (no points added)
+    final item = items[index];
+    totalDifficultyEncountered += item.difficulty;
+    itemTimes.add(15000); // Max time penalty
+
+    // Move to next
     setState(() => index++);
+    _startRound();
+  }
+
+  void _finishGame() {
+    _roundTimer?.cancel();
+    setState(() => isGameOver = true);
   }
 
   void onChoose(int optionIndex) {
     if (isGameOver) return;
+    _roundTimer?.cancel();
+
     final elapsed = DateTime.now().millisecondsSinceEpoch - startMs;
     itemTimes.add(elapsed);
 
@@ -96,14 +114,16 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       correctWeighted += item.difficulty;
       correctRaw++;
     }
-    next();
+
+    setState(() => index++);
+    _startRound();
   }
 
   Map<String, double> grade() {
     double weightedAccuracy = totalDifficultyEncountered == 0 ? 0.0 : correctWeighted / totalDifficultyEncountered;
-    double rawAccuracy = (index + 1) == 0 ? 0.0 : correctRaw / (index + 1);
+    double rawAccuracy = items.isEmpty ? 0.0 : correctRaw / items.length;
     double avgTime = itemTimes.isEmpty ? 5000 : itemTimes.reduce((a,b)=>a+b) / itemTimes.length;
-    double fluency = (1.0 - (avgTime / 25000)).clamp(0.0, 1.0);
+    double fluency = (1.0 - (avgTime / 15000)).clamp(0.0, 1.0);
     double deepLogic = weightedAccuracy > 0.65 ? 1.0 : weightedAccuracy * 0.6;
 
     return {
@@ -122,15 +142,54 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (index >= items.length && !isGameOver) return const Scaffold(body: Center(child: Text("Done! Waiting...")));
+    if (isGameOver) {
+      return Scaffold(
+        backgroundColor: Colors.black87,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.grid_on, color: Colors.tealAccent, size: 80),
+              const SizedBox(height: 20),
+              const Text("Matrix Test Complete!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Text("Score: $correctRaw / ${items.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
+              const SizedBox(height: 40),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(grade()),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text("NEXT GAME"),
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final item = items[index];
     bool is3x3 = item.gridSize == 3;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("2. Matrix Logic ($remainingSeconds)"),
+        title: Text("2. Matrix Logic (${index + 1}/${items.length})"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+                child: Text(
+                    "${remainingSeconds}s",
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                    )
+                )
+            ),
+          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+        ],
       ),
       body: Stack(
         children: [
@@ -195,18 +254,6 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
               ],
             ),
           ),
-          if (isGameOver)
-            Container(
-              color: Colors.black87,
-              child: Center(
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(grade()),
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text("NEXT GAME"),
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(20)),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -231,13 +278,10 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       child: Stack(
         alignment: Alignment.center,
         children: shapes.map((shape) {
-          // Standardize size
           double size = 50;
-          // If it's a small solid symbol inside a large outline, shrink it
           if (!shape.isOutline && [ShapeType.plus, ShapeType.cross, ShapeType.star].contains(shape.shape)) {
             size = 30;
           }
-          // Level 6 abstract lines should be large
           if ([ShapeType.lineVert, ShapeType.lineHorz, ShapeType.lineDiagF, ShapeType.lineDiagB, ShapeType.arc].contains(shape.shape)) {
             size = 50;
           }
@@ -262,24 +306,25 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     if (shape.shape == ShapeType.none) return const SizedBox();
 
     IconData icon;
-    // Map abstract shapes for Level 6
     if ([ShapeType.lineVert, ShapeType.lineHorz, ShapeType.lineDiagF, ShapeType.lineDiagB].contains(shape.shape)) {
-      // Using simple rotation of a bar for all lines
-      icon = Icons.remove; // Horizontal bar is the base
+      double w = 2.5;
+      double h = size;
       double rotation = 0.0;
-      if (shape.shape == ShapeType.lineVert) rotation = 0.25;
+      if (shape.shape == ShapeType.lineHorz) { w = size; h = 2.5; }
       if (shape.shape == ShapeType.lineDiagF) rotation = 0.125;
       if (shape.shape == ShapeType.lineDiagB) rotation = -0.125;
 
       return Transform.rotate(
         angle: rotation * 2 * pi,
-        child: Icon(Icons.remove, size: size, color: shape.color), // Using remove (dash) as line
+        child: Container(
+            width: w, height: h,
+            decoration: BoxDecoration(color: shape.color, borderRadius: BorderRadius.circular(4))
+        ),
       );
     } else if (shape.shape == ShapeType.arc) {
       return Icon(Icons.refresh, size: size, color: shape.color);
     }
 
-    // Standard Shapes
     if (shape.isOutline) {
       switch (shape.shape) {
         case ShapeType.square: icon = Icons.check_box_outline_blank; break;
@@ -292,7 +337,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       switch (shape.shape) {
         case ShapeType.square: icon = Icons.square_rounded; break;
         case ShapeType.circle: icon = Icons.circle; break;
-        case ShapeType.triangle: icon = Icons.change_history; break; // Solid triangle approx
+        case ShapeType.triangle: icon = Icons.change_history; break;
         case ShapeType.diamond: icon = Icons.diamond; break;
         case ShapeType.arrow: icon = Icons.arrow_upward_rounded; break;
         case ShapeType.star: icon = Icons.star_rounded; break;
@@ -335,10 +380,9 @@ class VisualMatrixItem {
   final int correctIndex;
   VisualMatrixItem({required this.difficulty, required this.gridSize, required this.logicDescription, required this.grid, required this.options, required this.correctIndex});
 }
-// --- FIXED GENERATOR LOGIC ---
+
 List<VisualMatrixItem> _generateVisualItems() {
   return [
-    // LVL 1: Rotation
     VisualMatrixItem(
         difficulty: 1, gridSize: 2, logicDescription: "Rotation",
         grid: [
@@ -349,15 +393,13 @@ List<VisualMatrixItem> _generateVisualItems() {
         options: [
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.0)],
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.12)],
+          [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.75)], // Correct
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.25)],
           [MatrixShape(shape: ShapeType.arrow, color: Colors.red, rotation: 0.75)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.75)], // Correct (Left)
         ],
-        correctIndex: 5
+        correctIndex: 2
     ),
-
-    // LVL 2: Subtraction
     VisualMatrixItem(
         difficulty: 2, gridSize: 2, logicDescription: "Subtraction",
         grid: [
@@ -375,8 +417,6 @@ List<VisualMatrixItem> _generateVisualItems() {
         ],
         correctIndex: 3
     ),
-
-    // LVL 3: Cyclic Pattern
     VisualMatrixItem(
         difficulty: 3, gridSize: 3, logicDescription: "Cyclic Pattern",
         grid: [
@@ -394,31 +434,21 @@ List<VisualMatrixItem> _generateVisualItems() {
         ],
         correctIndex: 2
     ),
-
-    // LVL 4: Sudoku Logic (FIXED: Decoupled Shapes/Symbols)
-    // Rules: Unique Shape, Unique Color, Unique Symbol per Row/Col.
-    // Shapes: Sq, Cir, Dia.
-    // Symbols: Plus, Cross, Star.
     VisualMatrixItem(
-        difficulty: 4, gridSize: 3, logicDescription: "Sudoku Logic (Unique Row/Col)",
+        difficulty: 4, gridSize: 3, logicDescription: "Sudoku Logic",
         grid: [
-          // R1: Sq+, Cir x, Dia *
           [MatrixShape(shape: ShapeType.square, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
-
-          // R2: Dia x, Sq *, Cir +  <-- Fixed: Square is now Star, Diamond is Cross
           [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-
-          // R3: Cir *, Dia +, ? (Sq x) <-- Fixed: Square must be Cross
           [MatrixShape(shape: ShapeType.circle, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
         ],
         options: [
           [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)], // Correct (Sq, Red, Cross)
+          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)], // Correct
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
@@ -426,10 +456,8 @@ List<VisualMatrixItem> _generateVisualItems() {
         ],
         correctIndex: 1
     ),
-
-    // LVL 5: Sum Columns
     VisualMatrixItem(
-        difficulty: 5, gridSize: 3, logicDescription: "Arithmetic (C1 + C2 = C3)",
+        difficulty: 5, gridSize: 3, logicDescription: "Arithmetic",
         grid: [
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 1)], [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 3)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 4)],
@@ -438,47 +466,36 @@ List<VisualMatrixItem> _generateVisualItems() {
         options: [
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 1)],
           [MatrixShape(shape: ShapeType.square, color: Colors.teal, count: 2)],
-          [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], // Correct (1+1=2)
+          [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], // Correct
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 3)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, count: 2)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 4)],
         ],
         correctIndex: 2
     ),
-
-// LVL 6: XOR Logic (Complex, Harder, Readable)
     VisualMatrixItem(
       difficulty: 6,
       gridSize: 3,
-      logicDescription: "Column XOR (Top ^ Mid = Bot, Complex Shapes)",
+      logicDescription: "Column XOR",
       grid: [
-        // Row 1 (Top)
-        [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25)], // Cell 0
-        [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)], // Cell 1
-        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.lineHorz, color: Colors.black, rotation: 0.0)], // Cell 2
-
-        // Row 2 (Mid)
-        [MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25), MatrixShape(shape: ShapeType.star, color: Colors.green)], // Cell 3
-        [MatrixShape(shape: ShapeType.diamond, color: Colors.teal), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)], // Cell 4
-        [MatrixShape(shape: ShapeType.lineHorz, color: Colors.black, rotation: 0.0), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)], // Cell 5
-
-        // Row 3 (Bottom) = XOR(Top ^ Mid)
-        [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.star, color: Colors.green)], // Cell 6
-        [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.diamond, color: Colors.teal)], // Cell 7
-        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)], // Cell 8
+        [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25)],
+        [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)],
+        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.lineHorz, color: Colors.black, rotation: 0.0)],
+        [MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25), MatrixShape(shape: ShapeType.star, color: Colors.green)],
+        [MatrixShape(shape: ShapeType.diamond, color: Colors.teal), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)],
+        [MatrixShape(shape: ShapeType.lineHorz, color: Colors.black, rotation: 0.0), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)],
+        [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.star, color: Colors.green)],
+        [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.diamond, color: Colors.teal)],
       ],
       options: [
-        // Correct XOR result
         [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.star, color: Colors.green)],
         [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.diamond, color: Colors.teal)],
         [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25)],
         [MatrixShape(shape: ShapeType.star, color: Colors.green), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)],
-        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)],
+        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)], // Correct
         [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)],
       ],
       correctIndex: 4,
     ),
-
-
   ];
 }
