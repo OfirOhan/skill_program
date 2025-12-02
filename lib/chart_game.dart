@@ -11,21 +11,17 @@ class ChartDashGame extends StatefulWidget {
 }
 
 class _ChartDashGameState extends State<ChartDashGame> {
-  // Game State
   late List<ChartQuestion> questions;
   int index = 0;
   bool isGameOver = false;
 
-  // Timer
   Timer? _roundTimer;
   int remainingSeconds = 15;
   int startMs = 0;
 
-  // Metrics
   int correctCount = 0;
   List<int> reactionTimes = [];
 
-  // Feedback
   Color? feedbackColor;
   String? feedbackText;
 
@@ -48,8 +44,13 @@ class _ChartDashGameState extends State<ChartDashGame> {
       return;
     }
 
+    // Dynamic Time Limit based on difficulty
+    int timeLimit = 15;
+    if (index == 1) timeLimit = 25; // Moderate (Math involved)
+    if (index == 2) timeLimit = 35; // Hard (Complex Logic)
+
     setState(() {
-      remainingSeconds = 15;
+      remainingSeconds = timeLimit;
       startMs = DateTime.now().millisecondsSinceEpoch;
       feedbackColor = null;
       feedbackText = null;
@@ -112,17 +113,16 @@ class _ChartDashGameState extends State<ChartDashGame> {
     double accuracy = questions.isEmpty ? 0.0 : correctCount / questions.length;
     double avgRt = reactionTimes.isEmpty ? 5000 : reactionTimes.reduce((a,b)=>a+b) / reactionTimes.length;
 
-    // Speed: 2s is fast (1.0), 8s is slow (0.0)
-    double speedScore = (1.0 - ((avgRt - 2000) / 6000)).clamp(0.0, 1.0);
+    // Speed scoring: 5s avg is fast (1.0), 15s avg is slow (0.0) because questions are harder
+    double speedScore = (1.0 - ((avgRt - 5000) / 10000)).clamp(0.0, 1.0);
 
-    // Analytical thinking weighs accuracy heavily on complex charts
     return {
       "Data Interpretation": accuracy,
       "Statistical Skill": accuracy * 0.9,
-      "Numerical Reasoning": (accuracy * 0.8 + speedScore * 0.2).clamp(0.0, 1.0),
+      "Numerical Reasoning": (accuracy * 0.7 + speedScore * 0.3).clamp(0.0, 1.0),
       "Analytical Thinking": accuracy,
-      "Risk Assessment": accuracy * 0.85, // Implied by volatility detection
-      "Attention to Detail": (accuracy * 0.7 + speedScore * 0.3).clamp(0.0, 1.0),
+      "Risk Assessment": accuracy * 0.8,
+      "Attention to Detail": (accuracy * 0.6 + speedScore * 0.4).clamp(0.0, 1.0),
     };
   }
 
@@ -181,15 +181,19 @@ class _ChartDashGameState extends State<ChartDashGame> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                // --- QUESTION HEADER ---
-                Text(q.question, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
+                // HEADER
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(12)),
+                  child: Text(q.question, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                ),
+                const SizedBox(height: 10),
 
-                // --- CHART AREA ---
+                // CHART
                 Expanded(
                   flex: 5,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(10, 20, 20, 30),
+                    padding: const EdgeInsets.fromLTRB(10, 30, 20, 30),
                     decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -197,7 +201,7 @@ class _ChartDashGameState extends State<ChartDashGame> {
                         boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5, offset: const Offset(0, 2))]
                     ),
                     child: CustomPaint(
-                      painter: ChartPainter(q.type, q.dataPoints, q.labels),
+                      painter: ChartPainter(q.type, q.dataPoints, q.labels, highlightIndex: q.highlightIndex),
                       child: Container(),
                     ),
                   ),
@@ -205,28 +209,25 @@ class _ChartDashGameState extends State<ChartDashGame> {
 
                 const SizedBox(height: 20),
 
-                // --- OPTIONS ---
+                // OPTIONS
                 Expanded(
                   flex: 3,
-                  child: Column(
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    childAspectRatio: 2.5,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
                     children: List.generate(q.options.length, (i) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: () => _onOptionSelected(i),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.indigo[50],
-                                foregroundColor: Colors.indigo[900],
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                side: BorderSide(color: Colors.indigo[100]!)
-                            ),
-                            child: Text(q.options[i], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                          ),
+                      return ElevatedButton(
+                        onPressed: () => _onOptionSelected(i),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo[50],
+                            foregroundColor: Colors.indigo[900],
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(color: Colors.indigo[100]!)
                         ),
+                        child: Text(q.options[i], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       );
                     }),
                   ),
@@ -235,7 +236,6 @@ class _ChartDashGameState extends State<ChartDashGame> {
             ),
           ),
 
-          // Feedback Overlay
           if (feedbackColor != null)
             Container(
               color: feedbackColor!.withOpacity(0.9),
@@ -258,18 +258,16 @@ class _ChartDashGameState extends State<ChartDashGame> {
 
 // --- DATA MODELS ---
 
-enum ChartType { bar, line, dualBar }
+enum ChartType { bar, line }
 
 class ChartQuestion {
   final ChartType type;
   final String question;
-  final List<double> dataPoints; // For single series
+  final List<double> dataPoints;
   final List<String> labels;
   final List<String> options;
   final int correctIndex;
-
-  // Optional secondary data for Dual Bar
-  final List<double>? dataPoints2;
+  final int? highlightIndex;
 
   ChartQuestion({
     required this.type,
@@ -278,52 +276,103 @@ class ChartQuestion {
     required this.labels,
     required this.options,
     required this.correctIndex,
-    this.dataPoints2,
+    this.highlightIndex,
   });
 }
 
-// --- PAINTER ENGINE ---
+// --- PSYCHOMETRIC GENERATOR ---
+List<ChartQuestion> _generateQuestions() {
+  return [
+    // LEVEL 1: EASY (15s)
+    // Task: Simple comparison + slight calculation
+    // Q: Which department had the LOWEST expense?
+    // Data: 120, 90, 150, 60
+    ChartQuestion(
+      type: ChartType.bar,
+      question: "Which Dept spent the LEAST?",
+      dataPoints: [120, 90, 150, 60],
+      labels: ["HR", "IT", "MKT", "OPS"],
+      options: ["HR", "IT", "MKT", "OPS"],
+      correctIndex: 3, // OPS (60)
+    ),
 
+    // LEVEL 2: MODERATE (25s)
+    // Task: Percentage Growth Calculation
+    // Q: Calculate approx. % Growth from Feb to Mar.
+    // Feb: 40. Mar: 60.
+    // Formula: (60-40)/40 = 20/40 = 50%.
+    ChartQuestion(
+      type: ChartType.line,
+      question: "Calculate % Growth from Feb to Mar:",
+      dataPoints: [50, 40, 60, 55, 80],
+      labels: ["Jan", "Feb", "Mar", "Apr", "May"],
+      options: ["20%", "33%", "50%", "100%"],
+      correctIndex: 2, // 50%
+    ),
+
+    // LEVEL 3: HARD (35s)
+    // Task: Ratio / Logic Puzzle
+    // Q: If Revenue = Units * Price, which product earned the most?
+    // Bars show Units. Price is given in text.
+    // A (100u @ $2) = $200
+    // B (50u  @ $5) = $250 <-- Winner
+    // C (80u  @ $3) = $240
+    // D (200u @ $1) = $200
+    ChartQuestion(
+      type: ChartType.bar,
+      question: "If Price is:\nA=\$2, B=\$5, C=\$3, D=\$1\nWhich earned highest revenue?",
+      dataPoints: [100, 50, 80, 200], // Units sold
+      labels: ["A", "B", "C", "D"],
+      options: ["Product A", "Product B", "Product C", "Product D"],
+      correctIndex: 1, // B ($250)
+    ),
+  ];
+}
+
+// --- PAINTER ---
 class ChartPainter extends CustomPainter {
   final ChartType type;
   final List<double> data;
   final List<String> labels;
-  final List<double>? data2; // For dual charts (future proofing)
+  final int? highlightIndex;
 
-  ChartPainter(this.type, this.data, this.labels, {this.data2});
+  ChartPainter(this.type, this.data, this.labels, {this.highlightIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..strokeCap = StrokeCap.round;
-    final textStyle = const TextStyle(color: Colors.black54, fontSize: 12);
+    final textStyle = const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.bold);
 
-    // Draw Axis Lines
+    // Axis
     final axisPaint = Paint()..color = Colors.grey[400]!..strokeWidth = 2;
-    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), axisPaint); // X
-    canvas.drawLine(Offset(0, 0), Offset(0, size.height), axisPaint); // Y
+    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), axisPaint);
+    canvas.drawLine(Offset(0, 0), Offset(0, size.height), axisPaint);
 
     double maxVal = data.reduce(max);
-    if (maxVal == 0) maxVal = 1;
-    double barWidth = (size.width / data.length) * 0.6;
+    double gridMax = (maxVal / 10).ceil() * 10.0;
+    if (gridMax < maxVal) gridMax += 10;
+
+    // Grid
+    for(int i=1; i<=4; i++) {
+      double y = size.height - (size.height * (i/4));
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), Paint()..color = Colors.grey[200]!..strokeWidth = 1);
+      _drawText(canvas, "${(gridMax * i/4).toInt()}", Offset(-15, y), const TextStyle(fontSize: 10, color: Colors.grey));
+    }
+
+    double barWidth = (size.width / data.length) * 0.5;
     double spacing = (size.width / data.length);
 
     if (type == ChartType.bar) {
-      paint.color = Colors.blueAccent;
       for (int i = 0; i < data.length; i++) {
-        double h = (data[i] / maxVal) * size.height;
+        double h = (data[i] / gridMax) * size.height;
         double left = i * spacing + (spacing - barWidth) / 2;
         double top = size.height - h;
 
-        // Bar
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(Rect.fromLTWH(left, top, barWidth, h), const Radius.circular(4)),
-            paint
-        );
+        paint.color = Colors.blueAccent;
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(left, top, barWidth, h), const Radius.circular(4)), paint);
 
-        // Label
-        _drawText(canvas, labels[i], Offset(left + barWidth/2, size.height + 5), textStyle);
-        // Value (optional)
-        _drawText(canvas, data[i].toInt().toString(), Offset(left + barWidth/2, top - 15), textStyle);
+        _drawText(canvas, labels[i], Offset(left + barWidth/2, size.height + 10), textStyle);
+        _drawText(canvas, data[i].toInt().toString(), Offset(left + barWidth/2, top - 15), const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey));
       }
     }
     else if (type == ChartType.line) {
@@ -332,28 +381,24 @@ class ChartPainter extends CustomPainter {
       paint.style = PaintingStyle.stroke;
 
       Path path = Path();
+      List<Offset> points = [];
       for (int i = 0; i < data.length; i++) {
-        double h = (data[i] / maxVal) * size.height;
+        double h = (data[i] / gridMax) * size.height;
         double x = i * spacing + spacing / 2;
         double y = size.height - h;
-
-        if (i == 0) path.moveTo(x, y);
-        else path.lineTo(x, y);
-
-        // Draw points
-        canvas.drawCircle(Offset(x, y), 5, Paint()..color = Colors.orange..style = PaintingStyle.fill);
-
-        // Label
-        _drawText(canvas, labels[i], Offset(x, size.height + 5), textStyle);
+        points.add(Offset(x, y));
+        if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+        _drawText(canvas, labels[i], Offset(x, size.height + 10), textStyle);
+        _drawText(canvas, data[i].toInt().toString(), Offset(x, y - 20), const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey));
       }
       canvas.drawPath(path, paint);
-    }
-    else if (type == ChartType.dualBar) {
-      // Draw 2 bars per category
-      // Logic handled by specialized data2 passing, but for MVP we use "Comparative" via logic questions
-      // Let's implement a simple dual bar logic inside the single loop
-      // Assuming data contains interleaved values or we just visualize one set for simplicity
-      // Actually, let's stick to Bar/Line for robustness in MVP.
+      paint.style = PaintingStyle.fill;
+      for (var p in points) {
+        paint.color = Colors.white;
+        canvas.drawCircle(p, 6, paint);
+        paint.color = Colors.orange;
+        canvas.drawCircle(p, 4, paint);
+      }
     }
   }
 
@@ -361,45 +406,9 @@ class ChartPainter extends CustomPainter {
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
     textPainter.layout();
-    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy));
+    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2));
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// --- GENERATOR ---
-List<ChartQuestion> _generateQuestions() {
-  return [
-    // Q1: Bar Chart (Find Max)
-    ChartQuestion(
-      type: ChartType.bar,
-      question: "Which Quarter had the HIGHEST revenue?",
-      dataPoints: [45, 80, 65, 90], // Q4 is highest
-      labels: ["Q1", "Q2", "Q3", "Q4"],
-      options: ["Q1", "Q2", "Q3", "Q4"],
-      correctIndex: 3,
-    ),
-
-    // Q2: Line Chart (Trend Analysis)
-    ChartQuestion(
-      type: ChartType.line,
-      question: "How would you describe the trend?",
-      dataPoints: [20, 35, 50, 40, 65, 80], // Generally Up
-      labels: ["J", "F", "M", "A", "M", "J"],
-      options: ["Consistent Decline", "Stable / Flat", "Volatile Growth", "Sharp Crash"],
-      correctIndex: 2, // Growth but with a dip (Volatile Growth)
-    ),
-
-    // Q3: Bar Chart (Calculation/Comparison)
-    // Find the difference or lowest
-    ChartQuestion(
-      type: ChartType.bar,
-      question: "Which department spent the LEAST?",
-      dataPoints: [120, 90, 150, 60], // Dept D
-      labels: ["HR", "IT", "MKT", "OPS"],
-      options: ["HR", "IT", "Marketing", "Operations"],
-      correctIndex: 3,
-    ),
-  ];
 }

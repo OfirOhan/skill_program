@@ -11,36 +11,25 @@ class SpinGame extends StatefulWidget {
 }
 
 class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
-  // Game State
   late List<SpinLevel> levels;
   int index = 0;
   bool isGameOver = false;
 
-  // Animation for the "Target" object
   late AnimationController _spinController;
-
-  // Timer
   Timer? _roundTimer;
-  int remainingSeconds = 15;
+  int remainingSeconds = 20;
   int startMs = 0;
 
-  // Metrics
   int correctCount = 0;
   List<int> reactionTimes = [];
-
-  // Feedback
   Color? feedbackColor;
   String? feedbackText;
 
   @override
   void initState() {
     super.initState();
-    _spinController = AnimationController(
-        vsync: this,
-        duration: const Duration(seconds: 10)
-    )..repeat();
-
-    levels = _generateLevels();
+    _spinController = AnimationController(vsync: this, duration: const Duration(seconds: 8))..repeat();
+    levels = _generateHardLevels();
     _startRound();
   }
 
@@ -58,7 +47,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     }
 
     setState(() {
-      remainingSeconds = 15;
+      remainingSeconds = 20;
       startMs = DateTime.now().millisecondsSinceEpoch;
       feedbackColor = null;
       feedbackText = null;
@@ -67,9 +56,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     _roundTimer?.cancel();
     _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
-      if (remainingSeconds <= 0) {
-        _handleTimeout();
-      }
+      if (remainingSeconds <= 0) _handleTimeout();
     });
   }
 
@@ -102,7 +89,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     setState(() {
       if (isTimeout) {
         feedbackColor = Colors.orange;
-        feedbackText = "TIME'S UP!";
+        feedbackText = "TOO SLOW!";
       } else {
         feedbackColor = correct ? Colors.green : Colors.red;
         feedbackText = correct ? "MATCH!" : "WRONG!";
@@ -121,15 +108,15 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   Map<String, double> grade() {
     double accuracy = levels.isEmpty ? 0.0 : correctCount / levels.length;
     double avgRt = reactionTimes.isEmpty ? 5000 : reactionTimes.reduce((a,b)=>a+b) / reactionTimes.length;
-    double speedScore = (1.0 - ((avgRt - 1000) / 4000)).clamp(0.0, 1.0);
+    double speedScore = (1.0 - ((avgRt - 2000) / 6000)).clamp(0.0, 1.0);
 
     return {
       "3D Visualization": accuracy,
       "Spatial Awareness": (accuracy * 0.7 + speedScore * 0.3).clamp(0.0, 1.0),
       "Visual Perception Accuracy": accuracy,
       "Pattern Recognition": accuracy * 0.9,
-      "Fine Motor Control": speedScore, // Fast taps implies confidence
-      "Color Differentiation": 0.5, // N/A here, standard score
+      "Fine Motor Control": speedScore,
+      "Color Differentiation": 0.5,
     };
   }
 
@@ -162,7 +149,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     final level = levels[index];
 
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Dark mode for 3D visibility
+      backgroundColor: Colors.grey[900],
       appBar: AppBar(
         title: Text("9. 3D Spin (${index + 1}/${levels.length})"),
         backgroundColor: Colors.grey[850],
@@ -189,7 +176,6 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
         children: [
           Column(
             children: [
-              // --- TARGET AREA (Rotating) ---
               Expanded(
                 flex: 4,
                 child: Container(
@@ -207,7 +193,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                         painter: ObjectPainter(
                             level.targetObject,
                             rotationY: _spinController.value * 2 * pi,
-                            rotationX: pi / 6, // Slight tilt
+                            rotationX: pi / 8,
                             color: Colors.cyanAccent
                         ),
                       );
@@ -219,7 +205,6 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
               const Text("Which object matches the one above?", style: TextStyle(color: Colors.white70, fontSize: 16)),
               const SizedBox(height: 10),
 
-              // --- OPTIONS AREA (Static) ---
               Expanded(
                 flex: 3,
                 child: Row(
@@ -237,8 +222,8 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                         child: CustomPaint(
                           painter: ObjectPainter(
                               level.options[i],
-                              rotationY: level.optionRotations[i], // Fixed rotation
-                              rotationX: pi / 6,
+                              rotationY: level.optionRotations[i],
+                              rotationX: pi / 8,
                               color: Colors.white
                           ),
                         ),
@@ -251,7 +236,6 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
             ],
           ),
 
-          // Feedback Overlay
           if (feedbackColor != null)
             Container(
               color: feedbackColor!.withOpacity(0.8),
@@ -298,8 +282,6 @@ class SpinLevel {
   SpinLevel(this.targetObject, this.options, this.optionRotations, this.correctIndex);
 }
 
-// --- PAINTER ---
-
 class ObjectPainter extends CustomPainter {
   final Object3D object;
   final double rotationX;
@@ -310,123 +292,112 @@ class ObjectPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
-
+    final paint = Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke;
     double cx = size.width / 2;
     double cy = size.height / 2;
-    double scale = size.width / 3;
+    double scale = size.width / 4;
 
-    // 1. Rotate Vertices
     List<Offset> projected = [];
     for (var v in object.vertices) {
-      // Rotate Y
       double x1 = v.x * cos(rotationY) - v.z * sin(rotationY);
       double z1 = v.x * sin(rotationY) + v.z * cos(rotationY);
-
-      // Rotate X
       double y2 = v.y * cos(rotationX) - z1 * sin(rotationX);
-      double z2 = v.y * sin(rotationX) + z1 * cos(rotationX); // z2 for depth if needed
 
-      // Project (Simple Orthographic)
       projected.add(Offset(cx + x1 * scale, cy + y2 * scale));
     }
 
-    // 2. Draw Edges
     for (var e in object.edges) {
       canvas.drawLine(projected[e.start], projected[e.end], paint);
     }
 
-    // Draw vertices (optional nodes)
-    final dotPaint = Paint()..color = color.withOpacity(0.5)..style=PaintingStyle.fill;
-    for (var p in projected) {
-      canvas.drawCircle(p, 4, dotPaint);
-    }
+    final dotPaint = Paint()..color = color.withOpacity(0.6)..style=PaintingStyle.fill;
+    for (var p in projected) canvas.drawCircle(p, 3, dotPaint);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- GENERATOR (The Shapes) ---
+// --- HARDCORE CONTENT GENERATOR (FIXED ROUND 1) ---
 
-List<SpinLevel> _generateLevels() {
-  // SHAPE 1: CUBE
-  Object3D cube = Object3D(
-      [
-        Point3D(-0.5, -0.5, -0.5), Point3D(0.5, -0.5, -0.5),
-        Point3D(0.5, 0.5, -0.5), Point3D(-0.5, 0.5, -0.5),
-        Point3D(-0.5, -0.5, 0.5), Point3D(0.5, -0.5, 0.5),
-        Point3D(0.5, 0.5, 0.5), Point3D(-0.5, 0.5, 0.5),
-      ],
-      [
-        Edge(0,1), Edge(1,2), Edge(2,3), Edge(3,0), // Back face
-        Edge(4,5), Edge(5,6), Edge(6,7), Edge(7,4), // Front face
-        Edge(0,4), Edge(1,5), Edge(2,6), Edge(3,7)  // Connectors
-      ]
-  );
+List<SpinLevel> _generateHardLevels() {
 
-  // SHAPE 2: PYRAMID
-  Object3D pyramid = Object3D(
-      [
-        Point3D(0, -0.5, 0), // Top
-        Point3D(-0.5, 0.5, -0.5), Point3D(0.5, 0.5, -0.5), // Base Back
-        Point3D(0.5, 0.5, 0.5), Point3D(-0.5, 0.5, 0.5),   // Base Front
-      ],
-      [
-        Edge(0,1), Edge(0,2), Edge(0,3), Edge(0,4), // Sides
-        Edge(1,2), Edge(2,3), Edge(3,4), Edge(4,1)  // Base
-      ]
-  );
+  // SHAPE 1: "The Chair"
+  Object3D chair = _createPolycube([
+    Point3D(0,0,0), Point3D(0,1,0), Point3D(0,2,0), // Vertical
+    Point3D(1,0,0) // Horizontal Leg
+  ]);
 
-  // SHAPE 3: "L" BLOCK (Asymmetric)
-  Object3D lShape = Object3D(
-      [
-        Point3D(-0.5, -0.5, 0), Point3D(-0.5, 0.5, 0), // Vertical Bar
-        Point3D(0.5, 0.5, 0), // Horizontal ext
-        Point3D(-0.5, -0.5, 0.2), Point3D(-0.5, 0.5, 0.2), // Thickness
-        Point3D(0.5, 0.5, 0.2)
-      ],
-      [
-        Edge(0,1), Edge(1,2), Edge(3,4), Edge(4,5), // Face lines
-        Edge(0,3), Edge(1,4), Edge(2,5), // Depth lines
-        Edge(0,2), Edge(3,5) // Closing the L (simplified wireframe)
-      ]
-  );
+  // SHAPE: "T-Shape" (Distractor for Chair)
+  Object3D tShape = _createPolycube([
+    Point3D(0,0,0), Point3D(0,1,0), Point3D(0,2,0), // Vertical
+    Point3D(1,1,0) // Horizontal Mid
+  ]);
 
-  // Construct Distractor Logic (Mirroring)
-  // To mirror 3D, flip X coordinate.
+  // SHAPE: "The Snake"
+  Object3D snake = _createPolycube([
+    Point3D(0,0,0), Point3D(1,0,0), // Base
+    Point3D(1,1,0), // Up
+    Point3D(1,1,1)  // Forward (Z-axis)
+  ]);
+
+  // SHAPE: "The Claw"
+  Object3D claw = _createPolycube([
+    Point3D(0,0,0),
+    Point3D(1,0,0), Point3D(-1,0,0), // Wide Base
+    Point3D(0,1,0), // Center Up
+    Point3D(0,1,1)  // Hook Forward
+  ]);
+
   Object3D mirror(Object3D obj) {
     return Object3D(
-        obj.vertices.map((v) => Point3D(-v.x, v.y, v.z)).toList(), // Flip X
+        obj.vertices.map((v) => Point3D(-v.x, v.y, v.z)).toList(),
         obj.edges
     );
   }
 
   return [
-    // Level 1: Cube (Rotation match)
+    // 1. THE CHAIR (FIXED: Replaced 'mirror' with 'tShape' to remove ambiguity)
     SpinLevel(
-        cube,
-        [cube, pyramid, lShape], // Easy: Different shapes
-        [pi/4, 0, 0],
+        chair,
+        [tShape, chair, snake], // Option 0 is now clearly wrong (T-shape vs L-shape)
+        [pi/2, pi, 0], // Option 1 is Correct (Rotated 180)
+        1
+    ),
+
+    // 2. THE SNAKE
+    SpinLevel(
+        snake,
+        [snake, mirror(snake), _createPolycube([Point3D(0,0,0), Point3D(1,0,0), Point3D(1,1,0), Point3D(0,1,0)])],
+        [pi/2, pi/2, 0],
         0
     ),
-    // Level 2: Pyramid (Rotation)
+
+    // 3. THE CLAW
     SpinLevel(
-        pyramid,
-        [pyramid, pyramid, cube],
-        [pi, pi/2, 0], // One is rotated 180, one 90. Both valid shapes, logic requires finding the exact match?
-        // Actually for pyramid, 180 and 0 look different in 2D perspective.
+        claw,
+        [mirror(claw), claw, mirror(claw)],
+        [0, 3*pi/2, pi],
         1
     ),
-    // Level 3: L-Shape (Mirror Logic - Hard)
-    SpinLevel(
-        lShape,
-        [mirror(lShape), lShape, mirror(lShape)], // 1 Correct, 2 Mirrored traps
-        [0, pi/2, pi],
-        1
-    )
   ];
+}
+
+Object3D _createPolycube(List<Point3D> blocks) {
+  List<Point3D> verts = [];
+  List<Edge> edges = [];
+
+  for (int i=0; i<blocks.length; i++) {
+    verts.add(Point3D(blocks[i].x * 0.8, -blocks[i].y * 0.8, blocks[i].z * 0.8));
+  }
+
+  for (int i=0; i<blocks.length; i++) {
+    for (int j=i+1; j<blocks.length; j++) {
+      if ((blocks[i].x - blocks[j].x).abs() + (blocks[i].y - blocks[j].y).abs() + (blocks[i].z - blocks[j].z).abs() == 1) {
+        edges.add(Edge(i, j));
+      }
+    }
+  }
+
+  return Object3D(verts, edges);
 }
