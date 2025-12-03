@@ -13,6 +13,11 @@ import 'logic_blocks_game.dart';
 import 'chart_game.dart';
 import 'spin_game.dart';
 import 'precision_game.dart';
+import 'color_cascade_game.dart';
+import 'beat_buddy_game.dart';
+import 'roleplay_game.dart';
+import 'plan_push_game.dart';
+import 'stress_sprint_game.dart';
 
 
 class SessionManager extends StatefulWidget {
@@ -45,6 +50,11 @@ class _SessionManagerState extends State<SessionManager> {
     const ChartDashGame(),
     const SpinGame(),
     const PrecisionGame(),
+    const ColorCascadeGame(),
+    const BeatBuddyGame(),
+    const RoleplayGame(),
+    const PlanPushGame(),
+    const StressSprintGame(),
   ];
 
   final List<String> gameIds = [
@@ -58,6 +68,11 @@ class _SessionManagerState extends State<SessionManager> {
     "chart_dash",
     "3d_spin",
     "precision_path",
+    "color_cascade",
+    "beat_buddy",
+    "quick_roleplay",
+    "plan_push",
+    "stress_sprint",
   ];
 
   @override
