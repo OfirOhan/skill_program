@@ -21,39 +21,51 @@ class _PlanPushGameState extends State<PlanPushGame> {
   List<TaskItem> scheduledTasks = [];
 
   // Timer
-  Timer? _gameTimer;
-  int remainingSeconds = 30; // 30s to plan 3 days
+  Timer? _roundTimer;
+  int remainingSeconds = 30;
 
   // Metrics
   int totalScore = 0;
-  int maxPossibleScore = 0; // To calculate efficiency
+  int maxPossibleScore = 0;
   int perfectDays = 0;
-  int overtimeErrors = 0; // Going over limit
-  int underTimeErrors = 0; // Leaving too much gap
+  int overtimeErrors = 0;
+  int underTimeErrors = 0;
 
   @override
   void initState() {
     super.initState();
     _startLevel();
-    _startGameTimer();
   }
 
   @override
   void dispose() {
-    _gameTimer?.cancel();
+    _roundTimer?.cancel();
     super.dispose();
   }
 
-  void _startGameTimer() {
-    _gameTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+  void _startRoundTimer() {
+    remainingSeconds = 30; // Reset to 30s every round
+    _roundTimer?.cancel();
+    _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
-      if (remainingSeconds <= 0) _finishGame();
+      if (remainingSeconds <= 0) {
+        _handleTimeout();
+      }
     });
   }
 
   void _finishGame() {
-    _gameTimer?.cancel();
+    _roundTimer?.cancel();
     setState(() => isGameOver = true);
+  }
+
+  void _handleTimeout() {
+    _roundTimer?.cancel();
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Day ended automatically!"), duration: Duration(milliseconds: 800))
+    );
+    // Auto-submit whatever they have selected
+    _submitDay();
   }
 
   void _startLevel() {
@@ -64,26 +76,22 @@ class _PlanPushGameState extends State<PlanPushGame> {
 
     setState(() {
       scheduledTasks = [];
-      // Difficulty:
-      // Lvl 0: 8 hours, Simple values
-      // Lvl 1: 10 hours, Tight fit
-      // Lvl 2: 12 hours, Distractors (High duration, low value)
+      // Difficulty scaling
       if (level == 0) {
         workDayHours = 8;
-        availableTasks = _generateTasks(5, 8); // 5 tasks, easy fit
+        availableTasks = _generateTasks(5, 8);
       } else if (level == 1) {
         workDayHours = 10;
-        availableTasks = _generateTasks(7, 10); // More options
+        availableTasks = _generateTasks(7, 10);
       } else {
         workDayHours = 12;
         availableTasks = _generateTasks(8, 12, withDistractors: true);
       }
 
-      // Calculate optimal score for grading context (Approximate greedy)
-      // (Real max score calculation is Knapsack problem, overkill for this,
-      // so we just track raw accumulation vs potential).
       maxPossibleScore += availableTasks.fold(0, (sum, item) => sum + item.value);
     });
+
+    _startRoundTimer(); // Start new timer for this level
   }
 
   void _toggleTask(TaskItem task) {
@@ -99,54 +107,59 @@ class _PlanPushGameState extends State<PlanPushGame> {
   }
 
   void _submitDay() {
+    // Stop timer immediately to prevent double-firing
+    _roundTimer?.cancel();
+
     int usedTime = scheduledTasks.fold(0, (sum, item) => sum + item.duration);
     int score = scheduledTasks.fold(0, (sum, item) => sum + item.value);
 
     if (usedTime > workDayHours) {
-      // Overtime Penalty!
       overtimeErrors++;
-      score = (score * 0.5).toInt(); // Massive penalty for burnout
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("OVERTIME! Penalty applied."), backgroundColor: Colors.red, duration: Duration(milliseconds: 500))
-      );
+      score = (score * 0.5).toInt();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("OVERTIME! Penalty applied."), backgroundColor: Colors.red, duration: Duration(milliseconds: 500))
+        );
+      }
     } else if (workDayHours - usedTime > 2) {
-      // Undertime (Inefficient)
       underTimeErrors++;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Time wasted!"), backgroundColor: Colors.orange, duration: Duration(milliseconds: 500))
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Time wasted!"), backgroundColor: Colors.orange, duration: Duration(milliseconds: 500))
+        );
+      }
     } else {
-      // Perfect or near perfect
       perfectDays++;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Schedule Optimized!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Schedule Optimized!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
+        );
+      }
     }
 
-    setState(() {
-      totalScore += score;
-      level++;
-      _startLevel();
+    // Delay slightly to show snackbar before next level refresh
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        setState(() {
+          totalScore += score;
+          level++;
+          _startLevel();
+        });
+      }
     });
   }
 
   Map<String, double> grade() {
-    // Normalize metrics
-    // Efficiency: Did they fill the bar without breaking it?
     double timeMgmt = 1.0 - ((overtimeErrors + underTimeErrors) / 3.0);
-
-    // Prioritization: Did they pick high value items?
-    // A random pick gets ~50% of value. A good pick gets ~80-90%.
-    // We normalize assuming 50% is 0.0 score.
-    double rawRatio = maxPossibleScore == 0 ? 0 : totalScore / (maxPossibleScore * 0.6); // Approximate denominator
+    double rawRatio = maxPossibleScore == 0 ? 0 : totalScore / (maxPossibleScore * 0.6);
     double prioritization = (rawRatio - 0.5) * 2.0;
 
     return {
       "Planning & Prioritization": prioritization.clamp(0.0, 1.0),
       "Task Management": timeMgmt.clamp(0.0, 1.0),
-      "Resource Allocation": timeMgmt, // Same core skill
+      "Resource Allocation": timeMgmt,
       "Long-Term Strategy Building": (prioritization * 0.8 + timeMgmt * 0.2).clamp(0.0, 1.0),
-      "Time Estimation Skill": (1.0 - (overtimeErrors / 3.0)).clamp(0.0, 1.0), // Did they avoid going over?
+      "Time Estimation Skill": (1.0 - (overtimeErrors / 3.0)).clamp(0.0, 1.0),
       "Process Optimization": (perfectDays / 3.0).clamp(0.0, 1.0),
     };
   }
@@ -178,7 +191,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
     }
 
     int usedHours = scheduledTasks.fold(0, (sum, t) => sum + t.duration);
-    double progress = (usedHours / workDayHours).clamp(0.0, 1.0);
+    double progress = workDayHours == 0 ? 0 : (usedHours / workDayHours).clamp(0.0, 1.0);
     bool isOvertime = usedHours > workDayHours;
 
     return Scaffold(
@@ -203,7 +216,6 @@ class _PlanPushGameState extends State<PlanPushGame> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                // Capacity Bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
@@ -281,7 +293,6 @@ class _PlanPushGameState extends State<PlanPushGame> {
   }
 }
 
-// --- DATA ---
 class TaskItem {
   final String name;
   final int duration;
@@ -296,19 +307,14 @@ List<TaskItem> _generateTasks(int count, int maxHours, {bool withDistractors = f
   List<String> nouns = ["Report", "Client", "Bug", "Team", "Strategy", "UI", "API", "Budget"];
 
   for (int i = 0; i < count; i++) {
-    int d = rand.nextInt(4) + 1; // 1-4 hours
-    // Value logic: Roughly correlated to time, but with variance
-    // Normal: $10 per hour +/- random
+    int d = rand.nextInt(4) + 1;
     int v = (d * 10) + rand.nextInt(20) - 5;
 
-    // Add "Distractors" (High Time, Low Value) or "Gems" (Low Time, High Value)
     if (withDistractors && i % 3 == 0) {
       if (rand.nextBool()) {
-        // Distractor (Inefficient)
         d += 2;
         v -= 10;
       } else {
-        // Gem (Efficient)
         d = max(1, d - 1);
         v += 20;
       }
