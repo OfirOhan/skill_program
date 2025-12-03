@@ -79,11 +79,8 @@ class _PrecisionGameState extends State<PrecisionGame> {
       return;
     }
 
-    // Get size of the render box context if available, else screen
-    // We can't use _paintKey yet as it might not be rendered, so we use Screen size
-    // But we deduct standard appbar height approx
     final size = MediaQuery.of(context).size;
-    final h = size.height - 100; // Approx canvas height
+    final h = size.height - 150; // Approx canvas height
     final w = size.width;
 
     setState(() {
@@ -130,11 +127,9 @@ class _PrecisionGameState extends State<PrecisionGame> {
   void _handleInput(Offset globalPos) {
     if (isGameOver || levelCompleted) return;
 
-    // FIXED: Use the specific key of the Container to convert coords
     final RenderBox? box = _paintKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
 
-    // This converts global (screen) to local (canvas) correctly, handling AppBar offset
     Offset localPos = box.globalToLocal(globalPos);
 
     setState(() {
@@ -186,12 +181,15 @@ class _PrecisionGameState extends State<PrecisionGame> {
     });
   }
 
-  // --- PATH GENERATOR ---
+  // --- FIXED PATH GENERATOR (Added Padding) ---
   List<Offset> _generatePath(int type, double w, double h) {
     List<Offset> points = [];
     double steps = 100;
-    double startY = 50;
-    double endY = h - 50;
+
+    // FIXED: Add substantial padding so circles don't touch screen edges
+    double paddingY = 80.0;
+    double startY = paddingY;
+    double endY = h - paddingY;
 
     for (int i = 0; i <= steps; i++) {
       double t = i / steps;
@@ -266,7 +264,6 @@ class _PrecisionGameState extends State<PrecisionGame> {
       body: GestureDetector(
         onPanStart: _onPanStart,
         onPanUpdate: _onPanUpdate,
-        // FIXED: Container gets the Key so we know EXACTLY where 0,0 is
         child: Container(
           key: _paintKey,
           color: Colors.white,
@@ -321,6 +318,14 @@ class PathPainter extends CustomPainter {
     // 3. Draw Start & End
     canvas.drawCircle(pathPoints.first, width/1.5, Paint()..color = Colors.green);
     canvas.drawCircle(pathPoints.last, width/1.5, Paint()..color = Colors.redAccent);
+
+    TextPainter(text: const TextSpan(text: "START", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)
+      ..layout()
+      ..paint(canvas, pathPoints.first - const Offset(20, 7));
+
+    TextPainter(text: const TextSpan(text: "END", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)
+      ..layout()
+      ..paint(canvas, pathPoints.last - const Offset(15, 7));
 
     // 4. Draw User Trace
     final tracePaint = Paint()
