@@ -55,7 +55,7 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
 
     setState(() {
       level = lvl;
-      remainingSeconds = 20;
+      remainingSeconds = 25;
       startMs = DateTime.now().millisecondsSinceEpoch;
       feedbackColor = null;
 
