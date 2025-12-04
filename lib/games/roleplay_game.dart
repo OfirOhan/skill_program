@@ -318,16 +318,17 @@ List<SocialCue> _generateCues() {
         ]
     ),
 
-    // 4. Indirect Refusal (Cultural - High Context)
+    // 4. Damage Control / De-escalation (REPLACED)
+    // Logic: Public arguments are bad. "Offline" means "Stop talking now."
     SocialCue(
-        CueType.cultural,
-        "That might be difficult.",
-        "A Japanese client says this when you ask for a contract deadline extension.",
+        CueType.power,
+        "Let's take this offline.",
+        "A manager interrupts you during a heated debate in a team meeting.",
         [
-          CueOption("Hard No", true), // Correct: In high-context cultures, "difficult" often means "impossible"
-          CueOption("Maybe / Negotiation", false),
-          CueOption("Requires problem solving", false),
-          CueOption("Agreement with conditions", false),
+          CueOption("Schedule a later meeting", false), // Literal interpretation (Naive)
+          CueOption("Stop the public argument", true), // Correct: Immediate de-escalation
+          CueOption("They are interested", false),
+          CueOption("Agreement", false),
         ]
     ),
 

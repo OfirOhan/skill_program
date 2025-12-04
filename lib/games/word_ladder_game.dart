@@ -320,7 +320,7 @@ List<SymbolItem> _generateItems() {
     SymbolItem(
         "SYSTEMS",
         "🧱 : 🏰\n⬇️\n🧬 : ❓",
-        ["🩸", "🦖", "🏥", "🧪"],
+        ["🩸", "🧑", "🏥", "🧪"],
         1 // Dinosaur (DNA builds the Organism)
     ),
 
@@ -335,16 +335,16 @@ List<SymbolItem> _generateItems() {
     // 4. Conceptual Math (Result)
     SymbolItem(
         "CONCEPT MATH",
-        "🌧️ + ❄️ = ☃️\n🔥 + 🪵 = ❓",
-        ["🪑", "🌳", "🌫️", "🏠"],
-        2 // Smoke/Ash (Result of combustion)
+        "🐛 + ⏳ = 🦋\n🌱 + ☀️ = ❓",
+        ["🌻", "🌱", "🌫️", "💦"],
+        0 //
     ),
 
     SymbolItem(
         "METAMORPHOSIS (very hard)",
         "🥛 + 🧪 = 🧀\n🌾 + 🧫 = 🍞\n🪨 + ⏳ = ❓",
-        ["💎", "🏺", "🔥", "🧱"],
-        0 // 💎 — rock + time/pressure → gemstone (metamorphism/crystallization)
+        ["🧱", "🏺", "🔥", "💎"],
+        3 // 💎 — rock + time/pressure → gemstone (metamorphism/crystallization)
     ),
 
     // 6. SYSTEMS HIERARCHY (Genius 3x3)
