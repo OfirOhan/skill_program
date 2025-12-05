@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart'; // Added for Sound
 
 class BeatBuddyGame extends StatefulWidget {
   const BeatBuddyGame({Key? key}) : super(key: key);
@@ -108,6 +109,9 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
 
   void _onTap() {
     if (isGameOver) return;
+
+    // --- NEW: Play System Sound on Tap ---
+    SystemSound.play(SystemSoundType.click);
 
     double phase = _currentTime % beatIntervalMs;
     double devFromStart = phase;
