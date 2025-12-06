@@ -175,7 +175,7 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
     });
   }
 
-  // --- GRADING LOGIC (Mapped to your 10 Skills) ---
+  // --- GRADING LOGIC (Mapped to your 8 Skills) ---
   Map<String, double> _calculateScores() {
     int totalTrials = seq.length;
     if (totalTrials == 0) return {};
@@ -183,38 +183,51 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
     int totalTargets = hits + misses;
     int nonTargets = totalTrials - totalTargets;
 
-    // Base Metrics
+    // 1. Base Metrics
     double precision = hits / max(1, hits + falseAlarms);
     double recall = hits / max(1, totalTargets);
     double f1Score = (2 * precision * recall) / max(0.001, precision + recall);
 
-    // RT Metrics
+    // 2. Reaction Time
     hitReactionTimes.sort();
-    double medianRt = hitReactionTimes.isEmpty ? 1000 : hitReactionTimes[hitReactionTimes.length ~/ 2].toDouble();
-    double speedScore = (1.0 - ((medianRt - 400) / 800)).clamp(0.0, 1.0); // 400ms=1.0, 1200ms=0.0
+    double medianRt = hitReactionTimes.isEmpty
+        ? 1000
+        : hitReactionTimes[hitReactionTimes.length ~/ 2].toDouble();
 
-    // Attention Span (Decay check)
+    double normRt = medianRt.clamp(450, 1200);
+    double reactionSpeed = 1 - ((normRt - 450) / 750);
+
+    // 3. Attention Span (decay across time)
     double firstHalfAcc = firstHalfTrials == 0 ? 0 : firstHalfHits / max(1, firstHalfTrials);
     double secondHalfAcc = secondHalfTrials == 0 ? 0 : secondHalfHits / max(1, secondHalfTrials);
-    double decayScore = (secondHalfAcc / max(0.1, firstHalfAcc)).clamp(0.0, 1.0);
-    if (firstHalfAcc == 0 && secondHalfAcc > 0) decayScore = 1.0; // Started bad, got better
 
-    // False Alarm Rate
+    double decayScore = (secondHalfAcc / max(0.1, firstHalfAcc)).clamp(0.0, 1.0);
+    if (firstHalfAcc == 0 && secondHalfAcc > 0) decayScore = 1.0;
+
+    // 4. False Alarm Rate
     double falseAlarmRate = falseAlarms / max(1, nonTargets);
 
+    // Formula: Longest Streak / Total Targets
+    double sustainedAttention = (maxStreak / max(1, totalTargets)).clamp(0.0, 1.0);
+
+    // --- FINAL NORMALIZED SCORES 0–1 ---
     return {
-      "Working Memory": f1Score,
-      "Short-Term Memory": f1Score * 0.95, // Highly correlated
-      "Information Processing Speed": speedScore,
+      // Memory Systems
+      "Working Memory": f1Score,          // Full accuracy measure
+      "Short-Term Memory": recall,        // Pure memory of targets
+
+      // Speed & Attention
+      "Information Processing Speed": reactionSpeed,
       "Selective Attention": (1.0 - falseAlarmRate).clamp(0.0, 1.0),
-      "Sustained Attention": (maxStreak / max(5, totalTrials / 2)).clamp(0.0, 1.0),
+      "Sustained Attention": sustainedAttention,
       "Attention Span": decayScore,
-      "Multi-tasking Ability": f1Score * speedScore, // Ability to process Position+Color fast
-      "Pattern Recognition": precision, // Ability to recognize the 'Match' pattern correctly
-      "Reaction Time": speedScore, // Raw speed metric
-      "Visual Perception Accuracy": (1.0 - (falseAlarms / max(1, totalTrials))).clamp(0.0, 1.0), // Precision of visual discrimination
+
+      // Pattern and Speed
+      "Pattern Recognition": precision,   // Pure ability to detect match pattern
+      "Reaction Time": reactionSpeed,     // Same metric but different semantic meaning
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

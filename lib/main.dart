@@ -5,7 +5,13 @@ import 'package:flutter/services.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // make navigation bar transparent
+  // 🔒 Lock orientation (e.g., portrait only)
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    // optionally: DeviceOrientation.portraitDown
+  ]);
+
+  // 🎨 Your existing UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       systemNavigationBarColor: Colors.transparent,

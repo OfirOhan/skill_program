@@ -3,7 +3,8 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart'; // Added for Sound
+import 'package:flutter/services.dart'; // For Haptics
+import 'package:audioplayers/audioplayers.dart'; // Requires audioplayers package
 
 class BeatBuddyGame extends StatefulWidget {
   const BeatBuddyGame({Key? key}) : super(key: key);
@@ -38,9 +39,14 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   Color feedbackColor = Colors.transparent;
   bool showFeedback = false;
 
+  // Audio Players
+  final AudioPlayer _perfectPlayer = AudioPlayer();
+  final AudioPlayer _badPlayer = AudioPlayer();
+
   @override
   void initState() {
     super.initState();
+    _initAudio(); // Prepare sounds
     _startLevel(0);
 
     _ticker = createTicker((elapsed) {
@@ -52,10 +58,18 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
     _ticker.start();
   }
 
+  Future<void> _initAudio() async {
+    // Set mode to low latency for gaming
+    await _perfectPlayer.setPlayerMode(PlayerMode.lowLatency);
+    await _badPlayer.setPlayerMode(PlayerMode.lowLatency);
+  }
+
   @override
   void dispose() {
     _ticker.dispose();
     _levelTimer?.cancel();
+    _perfectPlayer.dispose();
+    _badPlayer.dispose();
     super.dispose();
   }
 
@@ -96,7 +110,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   void _finishGame() {
     _ticker.stop();
     _levelTimer?.cancel();
-    // Auto-pop with grade (Fix logic: return scores when finished)
     Navigator.of(context).pop(grade());
   }
 
@@ -107,22 +120,19 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
     Navigator.of(context).pop(grade());
   }
 
-  void _onTap() {
+  void _onTap() async {
     if (isGameOver) return;
-
-    // --- NEW: Play System Sound on Tap ---
-    SystemSound.play(SystemSoundType.click);
 
     double phase = _currentTime % beatIntervalMs;
     double devFromStart = phase;
     double devFromEnd = beatIntervalMs - phase;
     double actualDeviation = min(devFromStart, devFromEnd);
 
-    // Ignore accidental double taps (very short deviation) if we just hit one
-    // But allow fast misses.
-    // Limit: if > 250ms off, it's a complete miss or random tap
     if (actualDeviation > 250) {
       _triggerFeedback("MISS", Colors.grey);
+      // Play BAD sound for Miss
+      await _badPlayer.stop();
+      await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       return;
     }
 
@@ -132,11 +142,28 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
     if (actualDeviation < 45) {
       perfectHits++;
       _triggerFeedback("PERFECT", Colors.cyanAccent);
+
+      // Play PERFECT sound (Stop first to ensure restart)
+      await _perfectPlayer.stop();
+      await _perfectPlayer.play(AssetSource('sounds/perfect.mp3'));
+      HapticFeedback.heavyImpact();
+
     } else if (actualDeviation < 110) {
       goodHits++;
       _triggerFeedback(isLate ? "LATE" : "EARLY", Colors.amber);
+
+      // Play BAD/OKAY sound
+      await _badPlayer.stop();
+      await _badPlayer.play(AssetSource('sounds/bad.mp3'));
+      HapticFeedback.mediumImpact();
+
     } else {
       _triggerFeedback("BAD", Colors.red);
+
+      // Play BAD sound
+      await _badPlayer.stop();
+      await _badPlayer.play(AssetSource('sounds/bad.mp3'));
+      HapticFeedback.vibrate();
     }
   }
 
@@ -174,10 +201,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   Widget build(BuildContext context) {
     // Visualizer Math
     double progress = (_currentTime % beatIntervalMs) / beatIntervalMs;
-    // Ring shrinks from 300 down to 90 (Target is 90)
     double ringSize = 90 + (250 * (1.0 - progress));
-
-    // Beat Pulse: Center target expands slightly on the beat
     bool onBeat = progress > 0.9 || progress < 0.1;
     double centerSize = onBeat ? 100 : 90;
 
@@ -185,12 +209,12 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
       backgroundColor: Colors.grey[900],
       body: Stack(
         children: [
-          // GAME AREA (Full Screen Tap) - Placed FIRST (bottom layer)
+          // GAME AREA (Full Screen Tap)
           GestureDetector(
             onTapDown: (_) => _onTap(),
             behavior: HitTestBehavior.opaque,
             child: Container(
-              color: Colors.transparent, // Ensures hit test works
+              color: Colors.transparent,
               width: double.infinity,
               height: double.infinity,
               child: Stack(
@@ -202,19 +226,19 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
                     width: centerSize, height: centerSize,
                     decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4), // Crisp White Border
-                        color: Colors.white10, // Subtle fill
+                        border: Border.all(color: Colors.white, width: 4),
+                        color: Colors.white10,
                         boxShadow: [
                           if (onBeat) BoxShadow(color: Colors.cyanAccent.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)
                         ]
                     ),
                   ),
 
-                  // 2. FEEDBACK TEXT (Dead Center, No Movement)
+                  // 2. FEEDBACK TEXT
                   IgnorePointer(
                     child: AnimatedOpacity(
                       opacity: showFeedback ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 50), // Fast fade in
+                      duration: const Duration(milliseconds: 50),
                       child: Text(
                           feedbackText,
                           textAlign: TextAlign.center,
@@ -229,7 +253,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
                     ),
                   ),
 
-                  // 3. THE SHRINKING RING (Visual Metronome)
+                  // 3. THE SHRINKING RING
                   IgnorePointer(
                     child: Container(
                       width: ringSize,
@@ -237,14 +261,14 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: Colors.cyanAccent.withOpacity(0.8), // Cyan Ring
+                            color: Colors.cyanAccent.withOpacity(0.8),
                             width: 4
                         ),
                       ),
                     ),
                   ),
 
-                  // 4. Static Instruction (Pinned to bottom)
+                  // 4. Static Instruction
                   const Positioned(
                     bottom: 80,
                     child: Text(
@@ -258,8 +282,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
             ),
           ),
 
-          // APP BAR OVERLAY (Top layer)
-          // We build a custom "AppBar" so it sits ON TOP of the gesture detector
+          // APP BAR OVERLAY
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -267,7 +290,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text("12. Beat Buddy ($remainingSeconds)", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  // SKIP BUTTON (Using original TextButton style)
+                  // SKIP BUTTON
                   TextButton(
                       onPressed: _onSkipPressed,
                       child: const Text("SKIP", style: TextStyle(color: Colors.white54))
