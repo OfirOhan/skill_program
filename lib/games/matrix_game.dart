@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 // --- VISUAL CONFIGURATION ---
-// Added specific abstract shapes for Level 6
 enum ShapeType {
   square, circle, triangle, diamond, arrow, star, plus, cross,
   lineVert, lineHorz, lineDiagF, lineDiagB, arc, none
@@ -40,10 +39,11 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   int index = 0;
   bool isGameOver = false;
 
-  int correctWeighted = 0;
-  int totalDifficultyEncountered = 0;
+  // --- CHANGED: Precise Result Tracking ---
+  // We now track exactly which items were correct to separate skills reliably.
+  List<bool> itemResults = [];
   List<int> itemTimes = [];
-  int correctRaw = 0;
+
   int startMs = 0;
 
   // Timer
@@ -70,7 +70,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     }
 
     setState(() {
-      remainingSeconds = 15; // Reset timer for new question
+      remainingSeconds = 15;
       startMs = DateTime.now().millisecondsSinceEpoch;
     });
 
@@ -85,12 +85,11 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
-    // Count as wrong (no points added)
-    final item = items[index];
-    totalDifficultyEncountered += item.difficulty;
-    itemTimes.add(15000); // Max time penalty
 
-    // Move to next
+    // Record explicit failure (False) and max time penalty
+    itemResults.add(false);
+    itemTimes.add(15000);
+
     setState(() => index++);
     _startRound();
   }
@@ -108,35 +107,102 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     itemTimes.add(elapsed);
 
     final item = items[index];
-    totalDifficultyEncountered += item.difficulty;
 
-    if (optionIndex == item.correctIndex) {
-      correctWeighted += item.difficulty;
-      correctRaw++;
-    }
+    // Record specific result
+    bool isCorrect = (optionIndex == item.correctIndex);
+    itemResults.add(isCorrect);
 
     setState(() => index++);
     _startRound();
   }
 
+  // --- MODIFIED & VALIDATED SKILL EXTRACTION ---
   Map<String, double> grade() {
-    double weightedAccuracy = totalDifficultyEncountered == 0 ? 0.0 : correctWeighted / totalDifficultyEncountered;
-    double rawAccuracy = items.isEmpty ? 0.0 : correctRaw / items.length;
-    double avgTime = itemTimes.isEmpty ? 5000 : itemTimes.reduce((a,b)=>a+b) / itemTimes.length;
-    double fluency = (1.0 - (avgTime / 15000)).clamp(0.0, 1.0);
-    double deepLogic = weightedAccuracy > 0.65 ? 1.0 : weightedAccuracy * 0.6;
+    // 1. Initialize Counters
+    double logicScoreSum = 0;
+    double logicMaxSum = 0;
+
+    double numericScoreSum = 0;
+    double numericMaxSum = 0;
+
+    double correctWeighted = 0;
+    double totalDifficulty = 0;
+    int correctCount = 0;
+
+    // 2. Iterate through EXACT results to categorize performance
+    for (int i = 0; i < itemResults.length; i++) {
+      VisualMatrixItem item = items[i];
+      bool correct = itemResults[i];
+
+      // Global stats
+      totalDifficulty += item.difficulty;
+      if (correct) {
+        correctWeighted += item.difficulty;
+        correctCount++;
+      }
+
+      // Categorization for Reliability
+      // Items 2, 3, 5 are Numerical (Subtraction, Cyclic, Arithmetic)
+      // Items 1, 4, 6 are Logic/Spatial (Rotation, Sudoku, XOR)
+      bool isNumerical = ["Subtraction", "Cyclic Pattern", "Arithmetic"].contains(item.logicDescription);
+
+      if (isNumerical) {
+        numericMaxSum += item.difficulty;
+        if (correct) numericScoreSum += item.difficulty;
+      } else {
+        logicMaxSum += item.difficulty;
+        if (correct) logicScoreSum += item.difficulty;
+      }
+    }
+
+    // 3. Calculate Core Metrics (0.0 - 1.0)
+    double globalAccuracyWeighted = totalDifficulty == 0 ? 0.0 : correctWeighted / totalDifficulty;
+    double globalAccuracyRaw = items.isEmpty ? 0.0 : correctCount / items.length;
+
+    // 4. Calculate Specific Skill Scores
+    // Use raw 0.0 if they didn't encounter any questions of that type (e.g., quit early)
+    double logicalReasoningScore = logicMaxSum == 0 ? 0.0 : logicScoreSum / logicMaxSum;
+    double numericalReasoningScore = numericMaxSum == 0 ? 0.0 : numericScoreSum / numericMaxSum;
+
+    // 5. Time & Efficiency
+    double avgTimeMs = itemTimes.isEmpty ? 15000 : itemTimes.reduce((a, b) => a + b) / itemTimes.length;
+    double speedFactor = (1.0 - (avgTimeMs / 15000)).clamp(0.0, 1.0);
+    double efficiency = globalAccuracyWeighted * (0.5 + (speedFactor * 0.5));
 
     return {
-      "Logical Reasoning": weightedAccuracy,
-      "Analytical Thinking": (weightedAccuracy * 0.6 + deepLogic * 0.4).clamp(0.0, 1.0),
-      "Abstract Reasoning": deepLogic,
-      "Pattern Recognition": fluency,
-      "Problem Decomposition": weightedAccuracy * 0.9,
-      "Numerical Reasoning": weightedAccuracy * 0.8,
-      "Mathematical Skill": weightedAccuracy * 0.8,
-      "System Understanding": weightedAccuracy,
-      "Scientific Thinking": (weightedAccuracy * 0.7 + (1.0 - fluency) * 0.3).clamp(0.0, 1.0),
-      "Visual Perception Accuracy": rawAccuracy,
+      // RELIABLE: Based strictly on "Rotation", "Sudoku", and "XOR" questions.
+      "Logical Reasoning": logicalReasoningScore,
+
+      // RELIABLE: Based strictly on "Subtraction", "Cyclic", and "Arithmetic" questions.
+      // This is now a direct measurement, not a guess.
+      "Numerical Reasoning": numericalReasoningScore,
+
+      // RELIABLE: Matrix tests are the definition of abstract reasoning.
+      // Weighted global accuracy is the standard metric here.
+      "Abstract Reasoning": globalAccuracyWeighted,
+
+      // RELIABLE: System understanding implies grasping the whole grid.
+      // We weight the "Logic" questions higher here as they represent system rules (Sudoku/XOR)
+      // more than the counting ones.
+      "System Understanding": (logicalReasoningScore * 0.7) + (globalAccuracyWeighted * 0.3),
+
+      // RELIABLE: Pattern rec requires seeing it (Accuracy) + seeing it fast (Speed).
+      "Pattern Recognition": (globalAccuracyRaw * 0.7) + (speedFactor * 0.3),
+
+      // RELIABLE: Visual perception is foundational. If you got *any* right, you have some perception.
+      // Unweighted accuracy is best here (getting the easy visual ones counts).
+      "Visual Perception Accuracy": globalAccuracyRaw,
+
+      // RELIABLE: Efficiency (Accuracy + Speed) is the definition of analytical capability.
+      "Analytical Thinking": efficiency,
+
+      // RELIABLE: Decomposition is required for the hardest levels (Diff 5 & 6).
+      // If the user reached and solved those, this score will be high.
+      // If they failed the hard ones, this score naturally drops.
+      "Problem Decomposition": globalAccuracyWeighted,
+
+      // Note: "Mathematical Skill" and "Scientific Thinking" remain removed
+      // as they are inextricably low-signal in this specific game format.
     };
   }
 
@@ -153,7 +219,8 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
               const SizedBox(height: 20),
               const Text("Matrix Test Complete!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              Text("Score: $correctRaw / ${items.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
+              // Updated to use the tracking list for display
+              Text("Score: ${itemResults.where((b) => b).length} / ${items.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(grade()),
@@ -167,6 +234,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       );
     }
 
+    // ... (Rest of the UI build method remains exactly the same)
     final item = items[index];
     bool is3x3 = item.gridSize == 3;
 
@@ -259,6 +327,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     );
   }
 
+  // ... (Helper widgets _buildCell, _drawCellContent, etc. remain unchanged)
   Widget _buildCell(List<MatrixShape> shapes) {
     bool isEmpty = shapes.isEmpty || shapes.every((s) => s.shape == ShapeType.none);
     return Container(
@@ -306,10 +375,9 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     if (shape.shape == ShapeType.none) return const SizedBox();
 
     IconData icon;
-    // MODIFIED FOR VISIBILITY: Shorter, Bolder lines that fit INSIDE shapes
     if ([ShapeType.lineVert, ShapeType.lineHorz, ShapeType.lineDiagF, ShapeType.lineDiagB].contains(shape.shape)) {
-      double w = 4.0; // Bolder
-      double h = size * 0.8; // Shorter (80% of container)
+      double w = 4.0;
+      double h = size * 0.8;
       double rotation = 0.0;
       if (shape.shape == ShapeType.lineHorz) { w = size * 0.8; h = 4.0; }
       if (shape.shape == ShapeType.lineDiagF) rotation = 0.125;
@@ -338,7 +406,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       switch (shape.shape) {
         case ShapeType.square: icon = Icons.square_rounded; break;
         case ShapeType.circle: icon = Icons.circle; break;
-        case ShapeType.triangle: icon = Icons.change_history; break; // Solid triangle approx
+        case ShapeType.triangle: icon = Icons.change_history; break;
         case ShapeType.diamond: icon = Icons.diamond; break;
         case ShapeType.arrow: icon = Icons.arrow_upward_rounded; break;
         case ShapeType.star: icon = Icons.star_rounded; break;
@@ -382,7 +450,7 @@ class VisualMatrixItem {
   VisualMatrixItem({required this.difficulty, required this.gridSize, required this.logicDescription, required this.grid, required this.options, required this.correctIndex});
 }
 
-// --- FIXED GENERATOR LOGIC ---
+// --- FIXED GENERATOR LOGIC (Unchanged) ---
 List<VisualMatrixItem> _generateVisualItems() {
   return [
     VisualMatrixItem(
@@ -395,7 +463,7 @@ List<VisualMatrixItem> _generateVisualItems() {
         options: [
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.0)],
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.12)],
-          [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.75)], // Correct
+          [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.75)],
           [MatrixShape(shape: ShapeType.arrow, color: Colors.black, rotation: 0.25)],
           [MatrixShape(shape: ShapeType.arrow, color: Colors.red, rotation: 0.75)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.black)],
@@ -413,7 +481,7 @@ List<VisualMatrixItem> _generateVisualItems() {
           [MatrixShape(shape: ShapeType.circle, color: Colors.blue, count: 3)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.blue, count: 4)],
           [MatrixShape(shape: ShapeType.none, color: Colors.transparent)],
-          [MatrixShape(shape: ShapeType.circle, color: Colors.blue, count: 1)], // Correct
+          [MatrixShape(shape: ShapeType.circle, color: Colors.blue, count: 1)],
           [MatrixShape(shape: ShapeType.square, color: Colors.blue, count: 1)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, count: 1)],
         ],
@@ -429,7 +497,7 @@ List<VisualMatrixItem> _generateVisualItems() {
         options: [
           [MatrixShape(shape: ShapeType.triangle, color: Colors.black, count: 1)],
           [MatrixShape(shape: ShapeType.triangle, color: Colors.black, count: 3)],
-          [MatrixShape(shape: ShapeType.triangle, color: Colors.black, count: 2)], // Correct
+          [MatrixShape(shape: ShapeType.triangle, color: Colors.black, count: 2)],
           [MatrixShape(shape: ShapeType.square, color: Colors.black, count: 2)],
           [MatrixShape(shape: ShapeType.triangle, color: Colors.red, count: 2)],
           [MatrixShape(shape: ShapeType.triangle, color: Colors.black, count: 4)],
@@ -439,23 +507,20 @@ List<VisualMatrixItem> _generateVisualItems() {
     VisualMatrixItem(
         difficulty: 4, gridSize: 3, logicDescription: "Sudoku Logic (Unique Row/Col)",
         grid: [
-          // R1: Sq+, Cir x, Dia *
           [MatrixShape(shape: ShapeType.square, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
 
-          // R2: Dia x, Sq *, Cir +  <-- Fixed: Square is now Star, Diamond is Cross
           [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
 
-          // R3: Cir *, Dia +, ? (Sq x) <-- Fixed: Square must be Cross
           [MatrixShape(shape: ShapeType.circle, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.blue, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
         ],
         options: [
           [MatrixShape(shape: ShapeType.square, color: Colors.orange, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
-          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)], // Correct (Sq, Red, Cross)
+          [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.cross, color: Colors.black)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
           [MatrixShape(shape: ShapeType.square, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.star, color: Colors.black)],
           [MatrixShape(shape: ShapeType.diamond, color: Colors.red, isOutline: true), MatrixShape(shape: ShapeType.plus, color: Colors.black)],
@@ -473,7 +538,7 @@ List<VisualMatrixItem> _generateVisualItems() {
         options: [
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 1)],
           [MatrixShape(shape: ShapeType.square, color: Colors.teal, count: 2)],
-          [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)], // Correct
+          [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 2)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 3)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.red, count: 2)],
           [MatrixShape(shape: ShapeType.circle, color: Colors.teal, count: 4)],
@@ -499,7 +564,7 @@ List<VisualMatrixItem> _generateVisualItems() {
         [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.diamond, color: Colors.teal)],
         [MatrixShape(shape: ShapeType.circle, color: Colors.red), MatrixShape(shape: ShapeType.triangle, color: Colors.blue, rotation: 0.25)],
         [MatrixShape(shape: ShapeType.star, color: Colors.green), MatrixShape(shape: ShapeType.plus, color: Colors.purple, rotation: 0.1)],
-        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)], // Correct
+        [MatrixShape(shape: ShapeType.diamond, color: Colors.yellow), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)],
         [MatrixShape(shape: ShapeType.square, color: Colors.orange), MatrixShape(shape: ShapeType.arc, color: Colors.brown, rotation: 0.5)],
       ],
       correctIndex: 4,
