@@ -23,6 +23,12 @@ import 'games/stress_sprint_game.dart';
 // --- IMPORT ALL DEMOS (From demos/ directory) ---
 import 'demos/blink_demo.dart';
 import 'demos/matrix_demo.dart';
+import 'demos/digit_demo.dart';
+import 'demos/word_ladder_demo.dart';
+import 'demos/brick_demo.dart';
+import 'demos/split_tap_demo.dart';
+import 'demos/logic_block_demo.dart';
+
 
 class SessionManager extends StatefulWidget {
   const SessionManager({Key? key}) : super(key: key);
@@ -68,6 +74,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.onetwothree,
       instruction: "Memorize the numbers shown.\nThen, type them back in reverse or sorted order as requested.",
       gameWidget: DigitShuffleWidget(),
+      demoWidget: DigitShuffleDemoWidget(),
     ),
 
     // 4. Logic Sprint
@@ -76,14 +83,16 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.lightbulb_outline,
       instruction: "Solve the visual analogies and logic puzzles.\nThink fast: 'A is to B as C is to...?'",
       gameWidget: WordLadderGame(),
+      demoWidget: WordLadderDemoWidget(),
     ),
 
     // 5. Brick Uses
     const GameIntroScreen(
-      title: "5. Brick Uses",
+      title: "5. Object Brainstorm",
       icon: Icons.construction,
-      instruction: "Phase 1: Type as many creative uses for a brick as you can.\nPhase 2: Choose the most creative solution.",
+      instruction: "Phase 1: Type as many creative uses for the object you get as you can.\nPhase 2: Choose the most creative solution.",
       gameWidget: BrickGame(),
+      demoWidget: BrickDemoWidget(),
     ),
 
     // 6. Split Tap
@@ -92,6 +101,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.splitscreen,
       instruction: "Multitasking Test!\nTap the LEFT side when the color matches the rule.\nSolve Math on the RIGHT side.",
       gameWidget: SplitTapGame(),
+      demoWidget: SplitTapDemoWidget(),
     ),
 
     // 7. Pipe Flow
@@ -100,6 +110,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.water_drop,
       instruction: "Rotate the pipes to create a continuous path from the Blue Source to the Green Drain.",
       gameWidget: LogicBlocksGame(),
+      demoWidget: LogicBlocksDemoWidget(),
     ),
 
     // 8. Chart Dash

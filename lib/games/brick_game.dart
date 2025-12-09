@@ -313,7 +313,7 @@ class _BrickGameState extends State<BrickGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("5) Brick Uses — ${isDivergentPhase ? 'Brainstorm' : 'Decide'} ($currentSeconds)"),
+        title: Text("5. Object Brainstorm ($currentSeconds)"),
         automaticallyImplyLeading: false,
         backgroundColor: isDivergentPhase ? Colors.indigo : Colors.orange[800],
         foregroundColor: Colors.white,

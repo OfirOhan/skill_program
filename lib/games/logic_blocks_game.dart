@@ -232,7 +232,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
                     style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 5 ? Colors.red : Colors.orangeAccent
+                        color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
                     )
                 )
             ),
@@ -244,9 +244,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.blue[50],
+            color: Colors.indigo[50], // Light indigo background
             width: double.infinity,
-            child: const Text("Connect the BLUE source to the GREEN drain.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            child: const Text("Connect the BLUE source to the GREEN drain.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
           ),
           Expanded(
             child: Center(
@@ -256,9 +256,12 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
                   margin: const EdgeInsets.all(20),
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[700]!, width: 4)
+                      color: Colors.white, // CHANGED: White background
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.indigo[100]!, width: 4), // CHANGED: Light border
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
+                      ]
                   ),
                   child: GridView.builder(
                     physics: const NeverScrollableScrollPhysics(),
@@ -287,14 +290,16 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     bool isStart = (r == 0 && c == 0);
     bool isEnd = (r == gridSize - 1 && c == gridSize - 1);
 
-    Color pipeColor = Colors.grey[600]!;
-    if (tile.hasFlow) pipeColor = Colors.blueAccent;
+    // CHANGED: Colors for Light Theme
+    Color pipeColor = Colors.blueGrey[100]!; // Inactive pipe
+    if (tile.hasFlow) pipeColor = Colors.blue; // Active pipe
 
     return GestureDetector(
       onTap: () => _onTileTap(r, c),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.black12,
+          color: Colors.grey[50], // Very light grey tile bg
+          border: Border.all(color: Colors.white, width: 1), // Subtle grid lines
         ),
         child: AnimatedRotation(
           turns: tile.rotation * 0.25,
@@ -330,7 +335,7 @@ class PipeTile {
   }
 }
 
-// --- MAZE GENERATOR (DFS for complexity) ---
+// --- MAZE GENERATOR ---
 List<List<PipeTile>> _generateMazeGrid(int size) {
   var g = List.generate(size, (_) => List.generate(size, (_) => PipeTile(type: PipeType.empty)));
 
@@ -427,10 +432,13 @@ class PipePainter extends CustomPainter {
     }
 
     if (isEnd) {
-      final bg = Paint()..color = Colors.green[900]!..style=PaintingStyle.fill;
+      // CHANGED: Bright green instead of green[900]
+      final bg = Paint()..color = Colors.green..style=PaintingStyle.fill;
       canvas.drawCircle(Offset(cx, cy), size.width/3, bg);
-      final ring = Paint()..color = hasFlow ? Colors.greenAccent : Colors.green..style = PaintingStyle.stroke..strokeWidth = 4;
+
+      final ring = Paint()..color = hasFlow ? Colors.greenAccent : Colors.white..style = PaintingStyle.stroke..strokeWidth = 4;
       canvas.drawCircle(Offset(cx, cy), size.width/3, ring);
+
       if (hasFlow) {
         final glow = Paint()..color = Colors.greenAccent.withOpacity(0.8)..style=PaintingStyle.fill;
         canvas.drawCircle(Offset(cx, cy), size.width/4, glow);
