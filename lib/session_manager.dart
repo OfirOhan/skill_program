@@ -20,6 +20,10 @@ import 'games/roleplay_game.dart';
 import 'games/plan_push_game.dart';
 import 'games/stress_sprint_game.dart';
 
+// --- IMPORT ALL DEMOS (From demos/ directory) ---
+import 'demos/blink_demo.dart';
+import 'demos/matrix_demo.dart';
+
 class SessionManager extends StatefulWidget {
   const SessionManager({Key? key}) : super(key: key);
 
@@ -45,8 +49,8 @@ class _SessionManagerState extends State<SessionManager> {
       title: "1. Blink & Match",
       icon: Icons.flash_on,
       instruction: "Memorize the position and color.\nTap MATCH if the current item matches the one from 2 steps ago.",
-      skills: ["Working Memory", "Short-Term Memory", "Attention Span"],
       gameWidget: BlinkMatchWidget(),
+      demoWidget: BlinkDemoWidget(), // <--- ADDED THIS
     ),
 
     // 2. Matrix Swipe
@@ -54,8 +58,8 @@ class _SessionManagerState extends State<SessionManager> {
       title: "2. Matrix Logic",
       icon: Icons.grid_on,
       instruction: "Identify the pattern in the grid.\nSelect the missing piece that completes the logic.",
-      skills: ["Logical Reasoning", "Pattern Recognition", "Abstract Reasoning"],
       gameWidget: MatrixSwipeWidget(),
+      demoWidget: MatrixDemoWidget(),
     ),
 
     // 3. Digit Shuffle
@@ -63,7 +67,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "3. Digit Shuffle",
       icon: Icons.onetwothree,
       instruction: "Memorize the numbers shown.\nThen, type them back in reverse or sorted order as requested.",
-      skills: ["Short-Term Memory", "Processing Speed", "Numerical Reasoning"],
       gameWidget: DigitShuffleWidget(),
     ),
 
@@ -72,7 +75,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "4. Logic Sprint",
       icon: Icons.lightbulb_outline,
       instruction: "Solve the visual analogies and logic puzzles.\nThink fast: 'A is to B as C is to...?'",
-      skills: ["Verbal Reasoning", "Analytical Thinking", "Concepts"],
       gameWidget: WordLadderGame(),
     ),
 
@@ -81,7 +83,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "5. Brick Uses",
       icon: Icons.construction,
       instruction: "Phase 1: Type as many creative uses for a brick as you can.\nPhase 2: Choose the most creative solution.",
-      skills: ["Creativity", "Idea Fluency", "Design Thinking"],
       gameWidget: BrickGame(),
     ),
 
@@ -90,7 +91,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "6. Split Tap",
       icon: Icons.splitscreen,
       instruction: "Multitasking Test!\nTap the LEFT side when the color matches the rule.\nSolve Math on the RIGHT side.",
-      skills: ["Multi-tasking", "Selective Attention", "Reaction Time"],
       gameWidget: SplitTapGame(),
     ),
 
@@ -99,7 +99,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "7. Pipe Flow",
       icon: Icons.water_drop,
       instruction: "Rotate the pipes to create a continuous path from the Blue Source to the Green Drain.",
-      skills: ["Systems Thinking", "Problem Decomposition", "Planning"],
       gameWidget: LogicBlocksGame(),
     ),
 
@@ -108,7 +107,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "8. Chart Dash",
       icon: Icons.bar_chart,
       instruction: "Analyze the chart data quickly.\nAnswer the question about trends, max/min, or ratios.",
-      skills: ["Data Interpretation", "Statistical Skill", "Analytical Speed"],
       gameWidget: ChartDashGame(),
     ),
 
@@ -117,7 +115,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "9. 3D Spin",
       icon: Icons.view_in_ar,
       instruction: "Look at the rotating 3D object.\nIdentify which static option matches it (watch out for mirrored traps!).",
-      skills: ["Spatial Visualization", "Mental Rotation", "3D Perception"],
       gameWidget: SpinGame(),
     ),
 
@@ -126,7 +123,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "10. Precision Path",
       icon: Icons.fingerprint,
       instruction: "Trace the line from Green to Red.\nDo NOT touch the walls. Move smoothly.",
-      skills: ["Fine Motor Control", "Precision", "Hand-Eye Coordination"],
       gameWidget: PrecisionGame(),
     ),
 
@@ -135,7 +131,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "11. Color Cascade",
       icon: Icons.palette,
       instruction: "Round 1: Sort shades from Light to Dark.\nRound 2: Find the odd color in the grid.",
-      skills: ["Color Differentiation", "Visual Perception", "Detail"],
       gameWidget: ColorCascadeGame(),
     ),
 
@@ -144,7 +139,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "12. Beat Buddy",
       icon: Icons.music_note,
       instruction: "Visual Rhythm.\nTap exactly when the shrinking ring hits the center target.",
-      skills: ["Rhythm Coordination", "Timing", "Motor Control"],
       gameWidget: BeatBuddyGame(),
     ),
 
@@ -153,7 +147,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "13. Social Signal",
       icon: Icons.psychology,
       instruction: "Read the quote and the context.\nIdentify the true hidden meaning or social intent.",
-      skills: ["Empathy", "Social Awareness", "Subtext Recognition"],
       gameWidget: RoleplayGame(),
     ),
 
@@ -162,7 +155,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "14. Plan Push",
       icon: Icons.calendar_month,
       instruction: "Fill the schedule with tasks to maximize Value.\nDo not go overtime!",
-      skills: ["Prioritization", "Resource Allocation", "Strategy"],
       gameWidget: PlanPushGame(),
     ),
 
@@ -171,7 +163,6 @@ class _SessionManagerState extends State<SessionManager> {
       title: "15. Stress Sprint",
       icon: Icons.timer_off,
       instruction: "Solve simple math as the timer gets faster.\nPress CASH OUT to save points before you crash.",
-      skills: ["Stress Tolerance", "Risk Assessment", "Resilience"],
       gameWidget: StressSprintGame(),
     ),
   ];
