@@ -28,6 +28,14 @@ import 'demos/word_ladder_demo.dart';
 import 'demos/brick_demo.dart';
 import 'demos/split_tap_demo.dart';
 import 'demos/logic_block_demo.dart';
+import 'demos/chart_demo.dart';
+import 'demos/spin_demo.dart';
+import 'demos/precision_demo.dart';
+import 'demos/color_cascade_demo.dart';
+import 'demos/beat_buddy_demo.dart';
+import 'demos/roleplay_demo.dart';
+import 'demos/plan_push_demo.dart';
+import 'demos/stress_split_demo.dart';
 
 
 class SessionManager extends StatefulWidget {
@@ -119,6 +127,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.bar_chart,
       instruction: "Analyze the chart data quickly.\nAnswer the question about trends, max/min, or ratios.",
       gameWidget: ChartDashGame(),
+      demoWidget: ChartDashDemoWidget(),
     ),
 
     // 9. 3D Spin
@@ -127,6 +136,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.view_in_ar,
       instruction: "Look at the rotating 3D object.\nIdentify which static option matches it (watch out for mirrored traps!).",
       gameWidget: SpinGame(),
+      demoWidget: SpinDemoWidget(),
     ),
 
     // 10. Precision Path
@@ -135,6 +145,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.fingerprint,
       instruction: "Trace the line from Green to Red.\nDo NOT touch the walls. Move smoothly.",
       gameWidget: PrecisionGame(),
+      demoWidget: PrecisionDemoWidget(),
     ),
 
     // 11. Color Cascade
@@ -143,6 +154,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.palette,
       instruction: "Round 1: Sort shades from Light to Dark.\nRound 2: Find the odd color in the grid.",
       gameWidget: ColorCascadeGame(),
+      demoWidget: ColorCascadeDemoWidget(),
     ),
 
     // 12. Beat Buddy
@@ -151,6 +163,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.music_note,
       instruction: "Visual Rhythm.\nTap exactly when the shrinking ring hits the center target.",
       gameWidget: BeatBuddyGame(),
+      demoWidget: BeatBuddyDemoWidget(),
     ),
 
     // 13. Social Signal
@@ -159,6 +172,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.psychology,
       instruction: "Read the quote and the context.\nIdentify the true hidden meaning or social intent.",
       gameWidget: RoleplayGame(),
+      demoWidget: RoleplayDemoWidget(),
     ),
 
     // 14. Plan Push
@@ -167,6 +181,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.calendar_month,
       instruction: "Fill the schedule with tasks to maximize Value.\nDo not go overtime!",
       gameWidget: PlanPushGame(),
+      demoWidget: PlanPushDemoWidget(),
     ),
 
     // 15. Stress Sprint
@@ -175,6 +190,7 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.timer_off,
       instruction: "Solve simple math as the timer gets faster.\nPress CASH OUT to save points before you crash.",
       gameWidget: StressSprintGame(),
+      demoWidget: StressSprintDemoWidget(),
     ),
   ];
 

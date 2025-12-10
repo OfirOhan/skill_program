@@ -46,7 +46,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _initAudio(); // Prepare sounds
+    _initAudio();
     _startLevel(0);
 
     _ticker = createTicker((elapsed) {
@@ -59,7 +59,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   }
 
   Future<void> _initAudio() async {
-    // Set mode to low latency for gaming
     await _perfectPlayer.setPlayerMode(PlayerMode.lowLatency);
     await _badPlayer.setPlayerMode(PlayerMode.lowLatency);
   }
@@ -83,13 +82,12 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
       level = lvl;
       remainingSeconds = 15;
 
-      // L1: 60 BPM, L2: 90 BPM, L3: 120 BPM
       if (level == 0) bpm = 60;
       else if (level == 1) bpm = 90;
       else bpm = 120;
 
       beatIntervalMs = 60000 / bpm;
-      feedbackText = ""; // Clear text at start
+      feedbackText = "";
       showFeedback = false;
     });
 
@@ -117,7 +115,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   void _onSkipPressed() {
     _ticker.stop();
     _levelTimer?.cancel();
-    Navigator.of(context).pop(grade());
+    Navigator.of(context).pop(null); // Returns null correctly
   }
 
   void _onTap() async {
@@ -130,7 +128,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
 
     if (actualDeviation > 250) {
       _triggerFeedback("MISS", Colors.grey);
-      // Play BAD sound for Miss
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       return;
@@ -141,26 +138,20 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
 
     if (actualDeviation < 45) {
       perfectHits++;
-      _triggerFeedback("PERFECT", Colors.cyanAccent);
-
-      // Play PERFECT sound (Stop first to ensure restart)
+      _triggerFeedback("PERFECT", Colors.green);
       await _perfectPlayer.stop();
       await _perfectPlayer.play(AssetSource('sounds/perfect.mp3'));
       HapticFeedback.heavyImpact();
 
     } else if (actualDeviation < 110) {
       goodHits++;
-      _triggerFeedback(isLate ? "LATE" : "EARLY", Colors.amber);
-
-      // Play BAD/OKAY sound
+      _triggerFeedback(isLate ? "LATE" : "EARLY", Colors.orange);
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       HapticFeedback.mediumImpact();
 
     } else {
       _triggerFeedback("BAD", Colors.red);
-
-      // Play BAD sound
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       HapticFeedback.vibrate();
@@ -174,7 +165,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
       showFeedback = true;
     });
 
-    // Hide text after 300ms to keep UI clean
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => showFeedback = false);
     });
@@ -199,20 +189,19 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
-    // Visualizer Math
     double progress = (_currentTime % beatIntervalMs) / beatIntervalMs;
     double ringSize = 90 + (250 * (1.0 - progress));
     bool onBeat = progress > 0.9 || progress < 0.1;
     double centerSize = onBeat ? 100 : 90;
 
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // GAME AREA (Full Screen Tap)
+          // LAYER 1: GAME AREA
           GestureDetector(
             onTapDown: (_) => _onTap(),
-            behavior: HitTestBehavior.opaque,
+            behavior: HitTestBehavior.opaque, // Captures taps everywhere...
             child: Container(
               color: Colors.transparent,
               width: double.infinity,
@@ -220,40 +209,25 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // 1. TARGET ZONE (Fixed Center)
+                  // Target Zone
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 50),
                     width: centerSize, height: centerSize,
                     decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                        color: Colors.white10,
+                        color: Colors.grey[100],
+                        border: Border.all(
+                            color: onBeat ? Colors.indigo : Colors.grey[300]!,
+                            width: onBeat ? 6 : 4
+                        ),
                         boxShadow: [
-                          if (onBeat) BoxShadow(color: Colors.cyanAccent.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)
+                          if (onBeat)
+                            BoxShadow(color: Colors.indigo.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
                         ]
                     ),
                   ),
 
-                  // 2. FEEDBACK TEXT
-                  IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: showFeedback ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 50),
-                      child: Text(
-                          feedbackText,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: feedbackColor,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.0,
-                              shadows: const [Shadow(color: Colors.black, blurRadius: 5)]
-                          )
-                      ),
-                    ),
-                  ),
-
-                  // 3. THE SHRINKING RING
+                  // Shrinking Ring
                   IgnorePointer(
                     child: Container(
                       width: ringSize,
@@ -261,20 +235,55 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: Colors.cyanAccent.withOpacity(0.8),
+                            color: Colors.indigoAccent,
                             width: 4
                         ),
                       ),
                     ),
                   ),
 
-                  // 4. Static Instruction
-                  const Positioned(
-                    bottom: 80,
+                  // Feedback (Below center)
+                  Transform.translate(
+                    offset: const Offset(0, 120),
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: showFeedback ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 50),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                          decoration: BoxDecoration(
+                              color: feedbackColor,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(color: feedbackColor.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 2))
+                              ]
+                          ),
+                          child: Text(
+                              feedbackText,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2
+                              )
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Static Instruction
+                  Positioned(
+                    bottom: 60,
                     child: Text(
-                      "Tap exactly when the\nRing hits the Center",
+                      "Tap to the beat",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white38, fontSize: 16),
+                      style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold
+                      ),
                     ),
                   ),
                 ],
@@ -282,20 +291,40 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
             ),
           ),
 
-          // APP BAR OVERLAY
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("12. Beat Buddy ($remainingSeconds)", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  // SKIP BUTTON
-                  TextButton(
-                      onPressed: _onSkipPressed,
-                      child: const Text("SKIP", style: TextStyle(color: Colors.white54))
-                  )
-                ],
+          // LAYER 2: HEADER (This is the fix)
+          // We wrap the header in a GestureDetector that swallows touches.
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: GestureDetector(
+              onTap: () {
+                // DO NOTHING. This prevents taps here from reaching the Game Area.
+              },
+              behavior: HitTestBehavior.opaque, // Blocks touches
+              child: Container(
+                color: Colors.transparent, // Ensures it has hit test size
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("12. Beat Buddy ($remainingSeconds)",
+                            style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)
+                        ),
+
+                        // SKIP BUTTON
+                        TextButton(
+                            onPressed: _onSkipPressed,
+                            style: TextButton.styleFrom(
+                              // Giving it a touch area boost
+                              padding: const EdgeInsets.all(12),
+                            ),
+                            child: const Text("SKIP", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))
+                        )
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

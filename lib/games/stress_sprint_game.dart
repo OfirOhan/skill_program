@@ -27,11 +27,11 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
 
   // Timers
   late AnimationController _progressController;
-  double timeLimit = 5.0; // Starts at 5 seconds per question
+  double timeLimit = 5.0;
 
   // Metrics
   int maxLevelReached = 0;
-  bool panicFailure = false; // Did they crash?
+  bool panicFailure = false;
 
   @override
   void initState() {
@@ -56,8 +56,7 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     if (isGameOver) return;
 
     setState(() {
-      // Escalating Difficulty: Time gets shorter every level
-      // Lvl 1: 5.0s, Lvl 10: 2.0s
+      // Escalating Difficulty
       timeLimit = max(1.5, 5.0 - (level * 0.3));
 
       _generateMathProblem();
@@ -74,17 +73,15 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     int a = rand.nextInt(10) + (level * 2);
     int b = rand.nextInt(10) + (level * 2);
 
-    // Randomize Operation based on level
-    if (level < 3) { // Add
+    if (level < 3) {
       question = "$a + $b";
       correctAnswer = a + b;
-    } else if (level < 6) { // Sub
-      // Ensure positive result
+    } else if (level < 6) {
       int large = max(a, b);
       int small = min(a, b);
       question = "$large - $small";
       correctAnswer = large - small;
-    } else { // Mix or Mult
+    } else {
       if (rand.nextBool()) {
         int smallA = rand.nextInt(5)+2;
         int smallB = rand.nextInt(5)+2;
@@ -96,13 +93,10 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
       }
     }
 
-    // Options
     Set<int> opts = {correctAnswer};
     while(opts.length < 3) {
-      opts.add(correctAnswer + (rand.nextInt(10) - 5)); // +/- 5 error margin
+      opts.add(correctAnswer + (rand.nextInt(10) - 5));
     }
-    // Remove accidental duplicates if rand(0) happened, though Set handles it.
-    // Ensure distinct:
     while(opts.length < 3) opts.add(rand.nextInt(100));
 
     options = opts.toList()..shuffle();
@@ -112,15 +106,13 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     if (isGameOver) return;
 
     if (selected == correctAnswer) {
-      // Success! Add to pot
       setState(() {
-        currentPot += (level * 10); // Higher levels = More points
+        currentPot += (level * 10);
         level++;
         maxLevelReached = level;
       });
       _nextPuzzle();
     } else {
-      // Wrong Answer = CRASH
       _handleCrash("Wrong Answer!");
     }
   }
@@ -134,7 +126,7 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     setState(() {
       isGameOver = true;
       panicFailure = true;
-      currentPot = 0; // LOST EVERYTHING
+      currentPot = 0;
     });
   }
 
@@ -143,27 +135,20 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     setState(() {
       isGameOver = true;
       hasCashedOut = true;
-      bankedScore = currentPot; // SECURED
+      bankedScore = currentPot;
     });
   }
 
   Map<String, double> grade() {
-    // 1. Risk Assessment (Did they cash out?)
     double riskScore = hasCashedOut ? 1.0 : 0.0;
-
-    // 2. Stress Tolerance (How far did they get before stopping/crashing?)
-    // Level 10 is considered high stress tolerance
     double stress = (maxLevelReached / 10.0).clamp(0.0, 1.0);
-
-    // 3. Emotional Regulation (Did they panic-click wrong?)
-    // If they crashed due to wrong answer vs timeout implies panic
     double regulation = panicFailure ? 0.2 : 1.0;
 
     return {
       "Stress Tolerance": stress,
       "Frustration Handling": regulation,
       "Persistence": stress,
-      "Resilience": hasCashedOut ? 0.8 : 0.2, // Ability to recognize limit
+      "Resilience": hasCashedOut ? 0.8 : 0.2,
       "Decision Making Under Pressure": (riskScore * 0.6 + stress * 0.4).clamp(0.0, 1.0),
     };
   }
@@ -172,33 +157,39 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
   Widget build(BuildContext context) {
     if (isGameOver) {
       return Scaffold(
-        backgroundColor: panicFailure ? Colors.red[900] : Colors.green[900],
+        backgroundColor: Colors.white, // Clean End Screen
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                  panicFailure ? Icons.warning : Icons.lock,
-                  color: Colors.white, size: 80
+                  panicFailure ? Icons.warning_amber_rounded : Icons.lock_outline,
+                  color: panicFailure ? Colors.red : Colors.green,
+                  size: 80
               ),
               const SizedBox(height: 20),
               Text(
                   panicFailure ? "CRASHED!" : "SECURED!",
-                  style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)
+                  style: TextStyle(
+                      color: panicFailure ? Colors.red : Colors.green[800],
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold
+                  )
               ),
               const SizedBox(height: 10),
               Text(
-                  panicFailure ? "You lost the pot." : "Banked: $bankedScore",
-                  style: const TextStyle(color: Colors.white70, fontSize: 18)
+                  panicFailure ? "Pot lost." : "Banked: $bankedScore",
+                  style: const TextStyle(color: Colors.grey, fontSize: 18)
               ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(grade()),
-                icon: const Icon(Icons.check),
+                icon: const Icon(Icons.arrow_forward),
                 label: const Text("FINISH ASSESSMENT"),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
                 ),
               )
             ],
@@ -208,54 +199,78 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text("15. Stress Sprint (Lvl $level)"),
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.redAccent,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          // Skip Button logic is handled by "Finishing" with 0 score here usually,
+          // but to keep consistency let's add a standard Skip
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text("SKIP", style: TextStyle(color: Colors.redAccent))
+          )
+        ],
       ),
       body: Column(
         children: [
-          // --- HUD ---
+          // --- HUD (Indigo Theme) ---
           Container(
             padding: const EdgeInsets.all(20),
-            color: Colors.black87,
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+                color: Colors.indigo[50], // Soft Indigo
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.indigo.withOpacity(0.1))
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("POT AT RISK", style: TextStyle(color: Colors.redAccent, fontSize: 12)),
-                    Text("$currentPot", style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                    const Text("POT AT RISK", style: TextStyle(color: Colors.indigo, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text("$currentPot", style: const TextStyle(color: Colors.indigo, fontSize: 32, fontWeight: FontWeight.w900)),
                   ],
                 ),
                 ElevatedButton(
                   onPressed: _cashOut,
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: Colors.green, // Keep Green for Action
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15)
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                   ),
-                  child: const Text("CASH OUT"),
+                  child: const Text("CASH OUT", style: TextStyle(fontWeight: FontWeight.bold)),
                 )
               ],
             ),
           ),
 
           // --- TIMER BAR ---
-          AnimatedBuilder(
-            animation: _progressController,
-            builder: (context, child) {
-              return LinearProgressIndicator(
-                value: 1.0 - _progressController.value,
-                backgroundColor: Colors.red[100],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                    _progressController.value > 0.7 ? Colors.red : Colors.blue
-                ),
-                minHeight: 10,
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: AnimatedBuilder(
+              animation: _progressController,
+              builder: (context, child) {
+                // Color shifts from Indigo -> Red as time runs out
+                Color barColor = Color.lerp(Colors.indigo, Colors.red, _progressController.value)!;
+
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: 1.0 - _progressController.value,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                    minHeight: 12,
+                  ),
+                );
+              },
+            ),
           ),
 
           // --- PUZZLE AREA ---
@@ -264,7 +279,10 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(question, style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold)),
+                  Text(
+                      question,
+                      style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: Colors.black87)
+                  ),
                   const SizedBox(height: 50),
                   Wrap(
                     spacing: 20,
@@ -276,8 +294,11 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
                         child: ElevatedButton(
                           onPressed: () => _onOptionSelected(opt),
                           style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              backgroundColor: Colors.indigo[50]
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black87,
+                              elevation: 2,
+                              side: BorderSide(color: Colors.grey[300]!)
                           ),
                           child: Text("$opt", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                         ),

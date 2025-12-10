@@ -28,6 +28,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // Rotates continuously
     _spinController = AnimationController(vsync: this, duration: const Duration(seconds: 8))..repeat();
     levels = _generateHardLevels();
     _startRound();
@@ -129,7 +130,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.view_in_ar, color: Colors.cyanAccent, size: 80),
+              const Icon(Icons.view_in_ar, color: Colors.indigoAccent, size: 80),
               const SizedBox(height: 20),
               const Text("Spatial Test Done!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
@@ -149,11 +150,12 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     final level = levels[index];
 
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text("9. 3D Spin (${index + 1}/${levels.length})"),
-        backgroundColor: Colors.grey[850],
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
         automaticallyImplyLeading: false,
         actions: [
           Padding(
@@ -164,12 +166,12 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                     style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 5 ? Colors.red : Colors.cyan
+                        color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
                     )
                 )
             ),
           ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.white70)))
+          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(
@@ -182,9 +184,9 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                   width: double.infinity,
                   margin: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: Colors.indigo[50],
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.cyan.withOpacity(0.3))
+                      border: Border.all(color: Colors.indigo.withOpacity(0.3))
                   ),
                   child: AnimatedBuilder(
                     animation: _spinController,
@@ -194,7 +196,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                             level.targetObject,
                             rotationY: _spinController.value * 2 * pi,
                             rotationX: pi / 8,
-                            color: Colors.cyanAccent
+                            color: Colors.indigo
                         ),
                       );
                     },
@@ -202,7 +204,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                 ),
               ),
 
-              const Text("Which object matches the one above?", style: TextStyle(color: Colors.white70, fontSize: 16)),
+              const Text("Which object matches the one above?", style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
 
               Expanded(
@@ -215,16 +217,19 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                       child: Container(
                         width: 100, height: 100,
                         decoration: BoxDecoration(
-                            color: Colors.white10,
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white24)
+                            border: Border.all(color: Colors.grey[300]!),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))
+                            ]
                         ),
                         child: CustomPaint(
                           painter: ObjectPainter(
                               level.options[i],
                               rotationY: level.optionRotations[i],
                               rotationX: pi / 8,
-                              color: Colors.white
+                              color: Colors.blueGrey
                           ),
                         ),
                       ),
@@ -238,7 +243,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
 
           if (feedbackColor != null)
             Container(
-              color: feedbackColor!.withOpacity(0.8),
+              color: feedbackColor!.withOpacity(0.9),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -292,7 +297,7 @@ class ObjectPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke;
+    final paint = Paint()..color = color..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
     double cx = size.width / 2;
     double cy = size.height / 2;
     double scale = size.width / 4;
@@ -311,14 +316,14 @@ class ObjectPainter extends CustomPainter {
     }
 
     final dotPaint = Paint()..color = color.withOpacity(0.6)..style=PaintingStyle.fill;
-    for (var p in projected) canvas.drawCircle(p, 3, dotPaint);
+    for (var p in projected) canvas.drawCircle(p, 4, dotPaint);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- HARDCORE CONTENT GENERATOR (FIXED ROUND 1) ---
+// --- CONTENT GENERATOR (LOGIC FIXED) ---
 
 List<SpinLevel> _generateHardLevels() {
 
@@ -341,12 +346,14 @@ List<SpinLevel> _generateHardLevels() {
     Point3D(1,1,1)  // Forward (Z-axis)
   ]);
 
-  // SHAPE: "The Claw"
-  Object3D claw = _createPolycube([
+  // SHAPE: "The Crank" (Replaces the symmetric Claw)
+  // This shape is CHIRAL (Asymmetric). Mirroring it creates a distinct object.
+  // Shape: Up, Right, Forward.
+  Object3D crank = _createPolycube([
     Point3D(0,0,0),
-    Point3D(1,0,0), Point3D(-1,0,0), // Wide Base
-    Point3D(0,1,0), // Center Up
-    Point3D(0,1,1)  // Hook Forward
+    Point3D(0,1,0), // Up
+    Point3D(1,1,0), // Right
+    Point3D(1,1,1)  // Forward
   ]);
 
   Object3D mirror(Object3D obj) {
@@ -357,11 +364,11 @@ List<SpinLevel> _generateHardLevels() {
   }
 
   return [
-    // 1. THE CHAIR (FIXED: Replaced 'mirror' with 'tShape' to remove ambiguity)
+    // 1. THE CHAIR
     SpinLevel(
         chair,
-        [tShape, chair, snake], // Option 0 is now clearly wrong (T-shape vs L-shape)
-        [pi/2, pi, 0], // Option 1 is Correct (Rotated 180)
+        [tShape, chair, snake],
+        [pi/2, pi, 0], // Option 1 is Correct
         1
     ),
 
@@ -369,16 +376,16 @@ List<SpinLevel> _generateHardLevels() {
     SpinLevel(
         snake,
         [snake, mirror(snake), _createPolycube([Point3D(0,0,0), Point3D(1,0,0), Point3D(1,1,0), Point3D(0,1,0)])],
-        [pi/2, pi/2, 0],
+        [pi/2, pi/2, 0], // Option 0 is Correct
         0
     ),
 
-    // 3. THE CLAW
+    // 3. THE CRANK (Fixed: Now asymmetric)
     SpinLevel(
-        claw,
-        [mirror(claw), claw, mirror(claw)],
+        crank,
+        [mirror(crank), crank, mirror(crank)], // Mirror is now logically WRONG
         [0, 3*pi/2, pi],
-        1
+        1 // Center is correct
     ),
   ];
 }

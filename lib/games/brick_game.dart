@@ -79,7 +79,7 @@ class BrickGame extends StatefulWidget {
 class _BrickGameState extends State<BrickGame> {
   // phases
   bool isDivergentPhase = true;
-  bool isGameOver = false; // Triggers CLEAN results screen
+  bool isGameOver = false;
 
   // user inputs
   final TextEditingController _textController = TextEditingController();
@@ -125,7 +125,7 @@ class _BrickGameState extends State<BrickGame> {
         if (isDivergentPhase) {
           _switchToConvergent();
         } else {
-          _finishGame(); // Time out triggers Result Screen
+          _finishGame();
         }
       }
     });
@@ -169,16 +169,13 @@ class _BrickGameState extends State<BrickGame> {
     Future.delayed(const Duration(milliseconds: 500), _finishGame);
   }
 
-  // --- FINISH LOGIC (Shows Black Results Screen) ---
   void _finishGame() {
     _timer?.cancel();
     setState(() => isGameOver = true);
   }
 
-  // --- SKIP LOGIC (Instantly Exits - NO Results Screen) ---
   void _onSkipPressed() {
     _timer?.cancel();
-    // Directly pop with results, bypassing the "Sprint Done" screen
     Navigator.of(context).pop(calculateScores());
   }
 
@@ -281,28 +278,29 @@ class _BrickGameState extends State<BrickGame> {
 
   @override
   Widget build(BuildContext context) {
-    // --- CLEAN RESULTS SCREEN (Only shows if finished naturally) ---
+    // --- UPDATED RESULT SCREEN (White Theme) ---
     if (isGameOver) {
       return Scaffold(
-        backgroundColor: Colors.black87,
+        backgroundColor: Colors.white,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lightbulb, color: Colors.yellow, size: 80),
+              const Icon(Icons.lightbulb_outline, color: Colors.amber, size: 80),
               const SizedBox(height: 20),
-              const Text("Creativity Sprint Done!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("Sprint Complete!", style: TextStyle(color: Colors.black87, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              Text("Ideas Generated: $ideaCount", style: const TextStyle(color: Colors.white70, fontSize: 18)),
+              Text("Ideas Generated: $ideaCount", style: const TextStyle(color: Colors.grey, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(calculateScores()), // Finish and send scores
+                onPressed: () => Navigator.of(context).pop(calculateScores()),
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                 ),
               )
             ],
@@ -312,15 +310,17 @@ class _BrickGameState extends State<BrickGame> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text("5. Object Brainstorm ($currentSeconds)"),
         automaticallyImplyLeading: false,
-        backgroundColor: isDivergentPhase ? Colors.indigo : Colors.orange[800],
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           TextButton(
-              onPressed: _onSkipPressed, // Calls the Immediate Exit logic
-              child: const Text("SKIP", style: TextStyle(color: Colors.white))
+              onPressed: _onSkipPressed,
+              child: const Text("SKIP", style: TextStyle(color: Colors.redAccent))
           )
         ],
       ),
@@ -335,21 +335,27 @@ class _BrickGameState extends State<BrickGame> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Header
         Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.indigo[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.indigo.withOpacity(0.1))
+          ),
           child: const Column(
             children: [
               Text("PHASE 1: BRAINSTORM", style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
               SizedBox(height: 8),
-              Text("List unique uses for a BRICK.", textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              Text("(Be creative — quantity first)", style: TextStyle(color: Colors.grey)),
+              Text("List uses for a BRICK", textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+              Text("(Quantity over quality)", style: TextStyle(color: Colors.grey)),
             ],
           ),
         ),
 
-        const SizedBox(height: 14),
+        const SizedBox(height: 20),
 
+        // Input
         Row(
           children: [
             Expanded(
@@ -359,60 +365,88 @@ class _BrickGameState extends State<BrickGame> {
                 onSubmitted: (_) => _submitIdea(),
                 textInputAction: TextInputAction.go,
                 decoration: InputDecoration(
-                  hintText: "Type idea here...",
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  filled: true,
-                  fillColor: Colors.grey[100],
+                    hintText: "Type idea here...",
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[300]!)
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[300]!)
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.indigo, width: 2)
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)
                 ),
               ),
             ),
             const SizedBox(width: 10),
             IconButton.filled(
               onPressed: _submitIdea,
-              icon: const Icon(Icons.add),
-              style: IconButton.styleFrom(backgroundColor: Colors.indigo),
+              icon: const Icon(Icons.arrow_upward),
+              style: IconButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.all(12)
+              ),
             )
           ],
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text("Ideas: $ideaCount", style: const TextStyle(fontSize: 16)),
-            Text("Time left: $currentSeconds s", style: const TextStyle(fontSize: 16)),
+            Text("Ideas: $ideaCount", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black54)),
+            Text("Time: ${currentSeconds}s", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: currentSeconds < 10 ? Colors.red : Colors.indigo)),
           ],
         ),
 
         const SizedBox(height: 12),
 
+        // List
         Expanded(
           child: ListView.builder(
             itemCount: ideas.length,
             itemBuilder: (context, idx) {
-              final idea = ideas[idx];
-              final ts = ideaTimestamps[idx];
-              final ms = (ts / 1000).toStringAsFixed(1);
               return Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey[200]!)
+                ),
                 margin: const EdgeInsets.symmetric(vertical: 6),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Colors.indigo[100],
-                    foregroundColor: Colors.indigo[800],
-                    child: Text("${ideaCount - idx}"),
+                    backgroundColor: Colors.indigo[50],
+                    foregroundColor: Colors.indigo,
+                    child: Text("${ideaCount - idx}", style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                  title: Text(idea, style: const TextStyle(fontSize: 16)),
-                  subtitle: Text("t=${ms}s"),
+                  title: Text(ideas[idx], style: const TextStyle(fontSize: 16, color: Colors.black87)),
                 ),
               );
             },
           ),
         ),
 
+        const SizedBox(height: 10),
+
         ElevatedButton(
           onPressed: _switchToConvergent,
-          child: const Text("DONE BRAINSTORMING (NEXT)"),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo[50],
+              foregroundColor: Colors.indigo,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+          ),
+          child: const Text("DONE BRAINSTORMING", style: TextStyle(fontWeight: FontWeight.bold)),
         )
       ],
     );
@@ -422,10 +456,24 @@ class _BrickGameState extends State<BrickGame> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text("PHASE 2: DECISION", style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange.withOpacity(0.2))
+          ),
+          child: const Column(
+            children: [
+              Text("PHASE 2: DECISION", style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              SizedBox(height: 8),
+              Text("Pick your BEST idea.", textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 12),
-        const Text("Pick your best idea from the list.", textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+
         Expanded(
           child: ideas.isEmpty
               ? Center(child: Text("No ideas were created.", style: TextStyle(color: Colors.grey[600])))
@@ -434,35 +482,42 @@ class _BrickGameState extends State<BrickGame> {
             itemBuilder: (context, idx) {
               final idea = ideas[idx];
               final isSelected = selectedOptionIndex == idx;
-              final cat = _detectCategory(idea);
-              final subtitle = cat != null ? "category: $cat" : null;
-              return Card(
-                color: isSelected ? (convergentChosen && selectedOptionIndex == idx ? Colors.green[50] : Colors.white) : null,
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                child: ListTile(
-                  onTap: () => _selectConvergent(idx),
-                  leading: CircleAvatar(child: Text("${ideaCount - idx}")),
-                  title: Text(idea, style: const TextStyle(fontSize: 16)),
-                  subtitle: subtitle != null ? Text(subtitle) : null,
-                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.green) : null,
+
+              return GestureDetector(
+                onTap: () => _selectConvergent(idx),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                      color: isSelected ? Colors.green[50] : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: isSelected ? Colors.green : Colors.grey[200]!,
+                          width: isSelected ? 2 : 1
+                      ),
+                      boxShadow: [
+                        if (!isSelected) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))
+                      ]
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: isSelected ? Colors.green : Colors.grey[100],
+                        foregroundColor: isSelected ? Colors.white : Colors.grey,
+                        radius: 16,
+                        child: Text("${ideaCount - idx}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(child: Text(idea, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
+                      if (isSelected) const Icon(Icons.check_circle, color: Colors.green)
+                    ],
+                  ),
                 ),
               );
             },
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  _finishGame(); // Manual Finish triggers Result Screen
-                },
-                child: const Text("FINISH"),
-              ),
-            )
-          ],
-        )
       ],
     );
   }
