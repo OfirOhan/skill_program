@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // REQUIRED FOR HAPTICS & SOUND
 
 class LogicBlocksGame extends StatefulWidget {
   const LogicBlocksGame({Key? key}) : super(key: key);
@@ -14,6 +15,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   late List<List<PipeTile>> grid;
   int gridSize = 3;
   bool isGameOver = false;
+
+  // Lock to prevent double-winning
+  bool isProcessingWin = false;
 
   static const int totalLevels = 3;
   int currentLevelIndex = 0;
@@ -53,7 +57,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _handleTimeout() {
+    if (isProcessingWin) return;
     _levelTimer?.cancel();
+
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Time's Up! Moving to next level..."),
@@ -72,6 +78,8 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _startLevel() {
+    isProcessingWin = false; // Unlock for new level
+
     if (currentLevelIndex >= totalLevels) {
       _finishGame();
       return;
@@ -81,28 +89,18 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     else if (currentLevelIndex == 1) gridSize = 4;
     else gridSize = 6;
 
-    // 1. Generate Solved Grid (With Correct Rotations)
     grid = _generateMazeGrid(gridSize);
 
-    // 2. Aggressive Scramble (Break the connections)
     final rand = Random();
     for (var row in grid) {
       for (var tile in row) {
         if (tile.type == PipeType.empty) continue;
 
         if (tile.type == PipeType.straight) {
-          // Straight pipes have symmetry (0==2, 1==3).
-          // To ensure it's broken, we MUST add 1 (90 degrees).
-          // Adding 2 (180) would keep it connected.
           tile.rotation = (tile.rotation + 1) % 4;
-        }
-        else if (tile.type == PipeType.cross) {
-          // Cross connects everywhere, can't really scramble it.
-          // Just random rotation for variety.
+        } else if (tile.type == PipeType.cross) {
           tile.rotation = rand.nextInt(4);
-        }
-        else {
-          // Elbows and Tees: Rotate 1, 2, or 3 times. Never 0.
+        } else {
           int rotations = rand.nextInt(3) + 1;
           tile.rotation = (tile.rotation + rotations) % 4;
         }
@@ -114,7 +112,15 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _onTileTap(int r, int c) {
-    if (isGameOver) return;
+    if (isGameOver || isProcessingWin) return;
+
+    // --- FEEDBACK SECTION ---
+    // 1. Vibration (Requires real device + permission)
+    HapticFeedback.heavyImpact();
+
+    // 2. Sound (System "Click" sound)
+    SystemSound.play(SystemSoundType.click);
+    // ------------------------
 
     setState(() {
       grid[r][c].rotation = (grid[r][c].rotation + 1) % 4;
@@ -125,6 +131,8 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _checkFlow() {
+    if (isProcessingWin) return;
+
     for (var row in grid) {
       for (var tile in row) tile.hasFlow = false;
     }
@@ -161,6 +169,12 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _triggerWin() {
+    if (isProcessingWin) return;
+    isProcessingWin = true; // LOCK
+
+    // Optional: Win Sound/Vibration
+    HapticFeedback.vibrate();
+
     _levelTimer?.cancel();
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("FLOW STABLE!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
@@ -179,10 +193,10 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
 
   bool _isConnected(PipeTile curr, PipeTile next, Point currP, Point nextP) {
     int dirToNext = 0;
-    if (nextP.x > currP.x) dirToNext = 2; // Down
-    if (nextP.x < currP.x) dirToNext = 0; // Up
-    if (nextP.y > currP.y) dirToNext = 1; // Right
-    if (nextP.y < currP.y) dirToNext = 3; // Left
+    if (nextP.x > currP.x) dirToNext = 2;
+    if (nextP.x < currP.x) dirToNext = 0;
+    if (nextP.y > currP.y) dirToNext = 1;
+    if (nextP.y < currP.y) dirToNext = 3;
 
     if (!curr.hasOpening(dirToNext)) return false;
     int dirFromPrev = (dirToNext + 2) % 4;
@@ -335,7 +349,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 }
 
-// --- STRUCTURES ---
+// --- DATA STRUCTURES ---
 enum PipeType { straight, elbow, tee, cross, empty }
 
 class PipeTile {
@@ -356,7 +370,7 @@ class PipeTile {
   }
 }
 
-// --- MAZE GENERATOR (Fixed to include Rotations) ---
+// --- MAZE GENERATOR ---
 List<List<PipeTile>> _generateMazeGrid(int size) {
   var g = List.generate(size, (_) => List.generate(size, (_) => PipeTile(type: PipeType.empty)));
   List<Point<int>> stack = [const Point(0, 0)];
@@ -368,10 +382,10 @@ List<List<PipeTile>> _generateMazeGrid(int size) {
   while (stack.isNotEmpty) {
     Point<int> current = stack.last;
     List<int> neighbors = [];
-    if (current.x > 0 && !visited[current.x - 1][current.y]) neighbors.add(0); // Up
-    if (current.y < size - 1 && !visited[current.x][current.y + 1]) neighbors.add(1); // Right
-    if (current.x < size - 1 && !visited[current.x + 1][current.y]) neighbors.add(2); // Down
-    if (current.y > 0 && !visited[current.x][current.y - 1]) neighbors.add(3); // Left
+    if (current.x > 0 && !visited[current.x - 1][current.y]) neighbors.add(0);
+    if (current.y < size - 1 && !visited[current.x][current.y + 1]) neighbors.add(1);
+    if (current.x < size - 1 && !visited[current.x + 1][current.y]) neighbors.add(2);
+    if (current.y > 0 && !visited[current.x][current.y - 1]) neighbors.add(3);
 
     if (neighbors.isNotEmpty) {
       int dir = neighbors[rand.nextInt(neighbors.length)];
@@ -390,53 +404,37 @@ List<List<PipeTile>> _generateMazeGrid(int size) {
     for(int c=0; c<size; c++) {
       var conn = connections[r][c];
       int count = conn.where((b) => b).length;
-
-      // Determine Type AND Rotation
-      // Dir 0=Up, 1=Right, 2=Down, 3=Left
-
       if (count == 1) {
         g[r][c].type = PipeType.elbow;
-        // Point toward the one connection
-        if (conn[0]) g[r][c].rotation = 1; // Needs Up (0). Painter Elbow 0 is Left/Down. 1 is Up/Left. Wait.
-        // Painter Elbow:
-        // Rot 0: Down(2) + Left(3)
-        // Rot 1: Left(3) + Up(0) -> Has Up
-        // Rot 2: Up(0) + Right(1) -> Has Up
-        // Rot 3: Right(1) + Down(2)
-        // Single connection logic is fuzzy because we have 2 openings.
-        // Just aim one opening at the connection.
         if (conn[0]) g[r][c].rotation = 1;
         if (conn[1]) g[r][c].rotation = 2;
         if (conn[2]) g[r][c].rotation = 3;
         if (conn[3]) g[r][c].rotation = 0;
       }
       else if (count == 2) {
-        if (conn[0] && conn[2]) { // Up + Down
+        if (conn[0] && conn[2]) {
           g[r][c].type = PipeType.straight;
-          g[r][c].rotation = 0; // Vertical
-        } else if (conn[1] && conn[3]) { // Right + Left
+          g[r][c].rotation = 0;
+        } else if (conn[1] && conn[3]) {
           g[r][c].type = PipeType.straight;
-          g[r][c].rotation = 1; // Horizontal
+          g[r][c].rotation = 1;
         } else {
           g[r][c].type = PipeType.elbow;
-          // Elbow Connections:
-          if (conn[2] && conn[3]) g[r][c].rotation = 0; // Down + Left
-          if (conn[3] && conn[0]) g[r][c].rotation = 1; // Left + Up
-          if (conn[0] && conn[1]) g[r][c].rotation = 2; // Up + Right
-          if (conn[1] && conn[2]) g[r][c].rotation = 3; // Right + Down
+          if (conn[2] && conn[3]) g[r][c].rotation = 0;
+          if (conn[3] && conn[0]) g[r][c].rotation = 1;
+          if (conn[0] && conn[1]) g[r][c].rotation = 2;
+          if (conn[1] && conn[2]) g[r][c].rotation = 3;
         }
       }
       else if (count == 3) {
         g[r][c].type = PipeType.tee;
-        // Tee 0: E+S+W (No Up).
-        if (!conn[0]) g[r][c].rotation = 0; // No Up
-        if (!conn[1]) g[r][c].rotation = 1; // No Right
-        if (!conn[2]) g[r][c].rotation = 2; // No Down
-        if (!conn[3]) g[r][c].rotation = 3; // No Left
+        if (!conn[0]) g[r][c].rotation = 0;
+        if (!conn[1]) g[r][c].rotation = 1;
+        if (!conn[2]) g[r][c].rotation = 2;
+        if (!conn[3]) g[r][c].rotation = 3;
       }
       else {
         g[r][c].type = PipeType.cross;
-        // Rotation doesn't matter for cross
       }
     }
   }
