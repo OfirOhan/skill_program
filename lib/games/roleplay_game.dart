@@ -1,6 +1,7 @@
 // lib/roleplay_game.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class RoleplayGame extends StatefulWidget {
   const RoleplayGame({Key? key}) : super(key: key);
@@ -82,8 +83,10 @@ class _RoleplayGameState extends State<RoleplayGame> {
       // Weight scoring based on difficulty type
       if (cue.type == CueType.subtext) eqScore += 2;
       if (cue.type == CueType.cultural) sqScore += 2;
+      HapticFeedback.mediumImpact();
       _showFeedback(true, "Spot On.");
     } else {
+      HapticFeedback.heavyImpact();
       _showFeedback(false, "Misread.");
     }
   }
@@ -134,7 +137,10 @@ class _RoleplayGameState extends State<RoleplayGame> {
               Text("Accuracy: $correctCount / ${cues.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () { 
+                   HapticFeedback.lightImpact();
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
               )
@@ -151,7 +157,10 @@ class _RoleplayGameState extends State<RoleplayGame> {
         title: Text("13. Read the Room ($remainingSeconds)"),
         automaticallyImplyLeading: false,
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () { 
+             HapticFeedback.lightImpact();
+             Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

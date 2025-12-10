@@ -116,7 +116,7 @@ class _SessionManagerState extends State<SessionManager> {
     const GameIntroScreen(
       title: "7. Pipe Flow",
       icon: Icons.water_drop,
-      instruction: "Rotate the pipes to create a continuous path from the Blue Source to the Green Drain.",
+      instruction: "Rotate the pipes clockwise to create a continuous path from the Blue Source to the Green Drain.",
       gameWidget: LogicBlocksGame(),
       demoWidget: LogicBlocksDemoWidget(),
     ),

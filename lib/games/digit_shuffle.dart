@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class DigitShuffleWidget extends StatefulWidget {
   const DigitShuffleWidget({Key? key}) : super(key: key);
@@ -128,10 +129,13 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
 
   void onKeyTap(String value) {
     if (isGameOver || isMemorizing || feedbackMessage != null) return;
+    HapticFeedback.lightImpact();
     setState(() {
       if (value == "DEL") {
+        HapticFeedback.mediumImpact();
         if (userAnswer.isNotEmpty) userAnswer.removeLast();
       } else if (value == "GO") {
+        HapticFeedback.mediumImpact();
         _submitAnswer();
       } else {
         if (userAnswer.length < expected.length) {
@@ -170,6 +174,12 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
       feedbackMessage = isCorrect ? "CORRECT!" : "WRONG!";
       feedbackColor = isCorrect ? Colors.green : Colors.red;
     });
+    
+    if (isCorrect) {
+       HapticFeedback.mediumImpact();
+    } else {
+       HapticFeedback.heavyImpact();
+    }
 
     // 3. Delay before next round
     Future.delayed(const Duration(milliseconds: 1000), () {
@@ -227,7 +237,10 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
               Text("Score: ${(correctRecall + correctProcess)} / $totalRounds", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () {
+                   HapticFeedback.lightImpact();
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
                 style: ElevatedButton.styleFrom(
@@ -252,7 +265,10 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Center(child: Text("${roundSeconds}s", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange))),
             ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () {
+            HapticFeedback.lightImpact();
+            Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

@@ -1,6 +1,7 @@
 // lib/word_ladder_game.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class WordLadderGame extends StatefulWidget {
   const WordLadderGame({Key? key}) : super(key: key);
@@ -65,6 +66,7 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
   void _handleTimeout() {
     _questionTimer?.cancel();
+    HapticFeedback.vibrate();
     _showFeedback(false, isTimeout: true);
   }
 
@@ -83,6 +85,12 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
     bool isCorrect = (selectedIdx == item.correctIndex);
     if (isCorrect) correctCount++;
+
+    if (isCorrect) {
+       HapticFeedback.mediumImpact();
+    } else {
+       HapticFeedback.heavyImpact();
+    }
 
     _showFeedback(isCorrect);
   }
@@ -154,7 +162,10 @@ class _WordLadderGameState extends State<WordLadderGame> {
                 )
             ),
           ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () {
+             HapticFeedback.lightImpact();
+             Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

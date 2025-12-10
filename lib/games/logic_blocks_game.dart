@@ -116,10 +116,10 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
 
     // --- FEEDBACK SECTION ---
     // 1. Vibration (Requires real device + permission)
-    HapticFeedback.heavyImpact();
+    HapticFeedback.lightImpact();
 
     // 2. Sound (System "Click" sound)
-    SystemSound.play(SystemSoundType.click);
+    // SystemSound.play(SystemSoundType.click); // Removed to avoid double feedback or keep audio logic separate
     // ------------------------
 
     setState(() {

@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class PlanPushGame extends StatefulWidget {
   const PlanPushGame({Key? key}) : super(key: key);
@@ -96,6 +97,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
 
   void _toggleTask(TaskItem task) {
     if (isGameOver) return;
+    HapticFeedback.selectionClick();
 
     setState(() {
       if (scheduledTasks.contains(task)) {
@@ -116,6 +118,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
     if (usedTime > workDayHours) {
       overtimeErrors++;
       score = (score * 0.5).toInt();
+      HapticFeedback.heavyImpact();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("OVERTIME! Penalty applied."), backgroundColor: Colors.red, duration: Duration(milliseconds: 500))
@@ -123,6 +126,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
       }
     } else if (workDayHours - usedTime > 2) {
       underTimeErrors++;
+      HapticFeedback.mediumImpact();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Time wasted!"), backgroundColor: Colors.orange, duration: Duration(milliseconds: 500))
@@ -130,6 +134,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
       }
     } else {
       perfectDays++;
+      HapticFeedback.lightImpact();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Schedule Optimized!"), backgroundColor: Colors.green, duration: Duration(milliseconds: 500))
@@ -180,7 +185,10 @@ class _PlanPushGameState extends State<PlanPushGame> {
               Text("Value Generated: $totalScore", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () {
+                   HapticFeedback.lightImpact();
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
               )
@@ -198,7 +206,10 @@ class _PlanPushGameState extends State<PlanPushGame> {
       appBar: AppBar(
         title: Text("14. Plan Push ($remainingSeconds)"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        actions: [TextButton(onPressed: () {
+           HapticFeedback.lightImpact();
+           Navigator.of(context).pop(null);
+        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
       ),
       body: Column(
         children: [

@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class SplitTapGame extends StatefulWidget {
   const SplitTapGame({Key? key}) : super(key: key);
@@ -84,8 +85,8 @@ class _SplitTapGameState extends State<SplitTapGame> {
   void _scheduleNextLeftColor() {
     if (isGameOver) return;
 
-    // Fast intervals (600ms - 900ms)
-    int nextDelay = 600 + rand.nextInt(300);
+    // Slower intervals (1000ms - 1500ms) - Adjusted for user preference
+    int nextDelay = 800 + rand.nextInt(400);
     _leftSideTimer = Timer(Duration(milliseconds: nextDelay), _executeFlashCycle);
   }
 
@@ -148,8 +149,10 @@ class _SplitTapGameState extends State<SplitTapGame> {
       if (isTargetActive) {
         leftHits++;
         isTargetActive = false;
+        HapticFeedback.mediumImpact();
         currentStimulusColor = Colors.grey[300]!; // Feedback: Light off immediately
       } else {
+        HapticFeedback.heavyImpact();
         leftFalseAlarms++;
       }
     });
@@ -192,7 +195,13 @@ class _SplitTapGameState extends State<SplitTapGame> {
     mathRTs.add(rt);
 
     setState(() {
-      if (selection == mathAnswer) mathHits++; else mathWrongs++;
+      if (selection == mathAnswer) {
+        mathHits++;
+        HapticFeedback.mediumImpact();
+      } else {
+        mathWrongs++;
+        HapticFeedback.heavyImpact();
+      }
     });
     _nextMathProblem();
   }
@@ -238,7 +247,10 @@ class _SplitTapGameState extends State<SplitTapGame> {
               Text("Visual Hits: $leftHits  |  Math Solved: $mathHits", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () { 
+                   HapticFeedback.lightImpact(); 
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
               )
@@ -252,9 +264,13 @@ class _SplitTapGameState extends State<SplitTapGame> {
       appBar: AppBar(
         title: Text("6. Split Tap ($remainingSeconds)"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        actions: [TextButton(onPressed: () {
+            HapticFeedback.lightImpact();
+            Navigator.of(context).pop(null);
+        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
       ),
       body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch, // MAXIMIZE TOUCH AREA
         children: [
           // --- LEFT SIDE: VISUAL MONITOR ---
           Expanded(
@@ -266,7 +282,7 @@ class _SplitTapGameState extends State<SplitTapGame> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("TAP ON:", style: TextStyle(fontSize: 16, color: Colors.black54)),
+                    const Text("TAP ON:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 10),
                     // DYNAMIC INSTRUCTION BANNER (Updates synced with flash)
                     AnimatedContainer(

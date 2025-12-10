@@ -115,6 +115,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   void _onSkipPressed() {
     _ticker.stop();
     _levelTimer?.cancel();
+    HapticFeedback.lightImpact(); // Feedback for skip
     Navigator.of(context).pop(null); // Returns null correctly
   }
 
@@ -127,6 +128,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
     double actualDeviation = min(devFromStart, devFromEnd);
 
     if (actualDeviation > 250) {
+      HapticFeedback.heavyImpact(); // Miss
       _triggerFeedback("MISS", Colors.grey);
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));

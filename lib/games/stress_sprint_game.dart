@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class StressSprintGame extends StatefulWidget {
   const StressSprintGame({Key? key}) : super(key: key);
@@ -111,13 +112,16 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
         level++;
         maxLevelReached = level;
       });
+      HapticFeedback.mediumImpact();
       _nextPuzzle();
     } else {
+      HapticFeedback.heavyImpact();
       _handleCrash("Wrong Answer!");
     }
   }
 
   void _handleTimeout() {
+    HapticFeedback.vibrate();
     _handleCrash("Time's Up!");
   }
 
@@ -132,6 +136,7 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
 
   void _cashOut() {
     _progressController.stop();
+    HapticFeedback.mediumImpact();
     setState(() {
       isGameOver = true;
       hasCashedOut = true;
@@ -183,7 +188,10 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
               ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () {
+                   HapticFeedback.lightImpact();
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("FINISH ASSESSMENT"),
                 style: ElevatedButton.styleFrom(
@@ -210,7 +218,10 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
           // Skip Button logic is handled by "Finishing" with 0 score here usually,
           // but to keep consistency let's add a standard Skip
           TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
+              onPressed: () { 
+                 HapticFeedback.lightImpact();
+                 Navigator.of(context).pop(null);
+              },
               child: const Text("SKIP", style: TextStyle(color: Colors.redAccent))
           )
         ],

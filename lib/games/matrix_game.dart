@@ -1,7 +1,7 @@
-// lib/matrix_game.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // --- VISUAL CONFIGURATION ---
 enum ShapeType {
@@ -85,6 +85,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
+    HapticFeedback.vibrate();
 
     // Record explicit failure (False) and max time penalty
     itemResults.add(false);
@@ -102,6 +103,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   void onChoose(int optionIndex) {
     if (isGameOver) return;
     _roundTimer?.cancel();
+    HapticFeedback.lightImpact();
 
     final elapsed = DateTime.now().millisecondsSinceEpoch - startMs;
     itemTimes.add(elapsed);
@@ -111,6 +113,12 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     // Record specific result
     bool isCorrect = (optionIndex == item.correctIndex);
     itemResults.add(isCorrect);
+    
+    if (isCorrect) {
+       HapticFeedback.mediumImpact();
+    } else {
+       HapticFeedback.heavyImpact();
+    }
 
     setState(() => index++);
     _startRound();
@@ -223,7 +231,10 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
               Text("Score: ${itemResults.where((b) => b).length} / ${items.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () { 
+                   HapticFeedback.lightImpact(); 
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)),
@@ -256,7 +267,10 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
                 )
             ),
           ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () { 
+              HapticFeedback.lightImpact();
+              Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

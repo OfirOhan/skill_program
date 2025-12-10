@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // --- DATA & CONFIG (Preserved) ---
 
@@ -162,6 +163,7 @@ class _BrickGameState extends State<BrickGame> {
   void _selectConvergent(int index) {
     if (selectedOptionIndex != -1) return;
     if (index < 0 || index >= ideas.length) return;
+    HapticFeedback.selectionClick();
     setState(() {
       selectedOptionIndex = index;
       convergentChosen = true;
@@ -171,11 +173,13 @@ class _BrickGameState extends State<BrickGame> {
 
   void _finishGame() {
     _timer?.cancel();
+    HapticFeedback.mediumImpact();
     setState(() => isGameOver = true);
   }
 
   void _onSkipPressed() {
     _timer?.cancel();
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(calculateScores());
   }
 

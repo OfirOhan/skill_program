@@ -1,7 +1,7 @@
-// lib/spin_game.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class SpinGame extends StatefulWidget {
   const SpinGame({Key? key}) : super(key: key);
@@ -63,6 +63,7 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
+    HapticFeedback.vibrate();
     _showFeedback(false, isTimeout: true);
   }
 
@@ -82,6 +83,12 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
 
     bool isCorrect = (optionIndex == level.correctIndex);
     if (isCorrect) correctCount++;
+    
+    if (isCorrect) {
+       HapticFeedback.mediumImpact();
+    } else {
+       HapticFeedback.heavyImpact();
+    }
 
     _showFeedback(isCorrect);
   }
@@ -137,7 +144,10 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
               Text("Score: $correctCount / ${levels.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () {
+                   HapticFeedback.lightImpact();
+                   Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
               )
@@ -171,7 +181,10 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
                 )
             ),
           ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () { 
+             HapticFeedback.lightImpact();
+             Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

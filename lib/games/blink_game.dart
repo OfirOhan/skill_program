@@ -1,6 +1,7 @@
 // lib/blink_game.dart
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 class BlinkMatchWidget extends StatefulWidget {
@@ -88,6 +89,7 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
         misses++;
         currentStreak = 0;
         _flashFeedback(Colors.orange.withOpacity(0.2));
+        HapticFeedback.vibrate(); // Missed match
       }
     }
 
@@ -129,6 +131,7 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
   }
 
   void _handleInput() {
+    HapticFeedback.lightImpact(); // Input feedback
     if (!running || isGameOver || seq.isEmpty) return;
 
     final currentIndex = seq.length - 1;
@@ -152,10 +155,12 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
         if (isFirstHalf) firstHalfHits++; else secondHalfHits++;
 
         _flashFeedback(Colors.green.withOpacity(0.3));
+        HapticFeedback.mediumImpact(); // Correct match
       } else {
         falseAlarms++;
         currentStreak = 0;
         _flashFeedback(Colors.red.withOpacity(0.3));
+        HapticFeedback.heavyImpact(); // Wrong match
       }
     });
   }
@@ -236,7 +241,10 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
         title: const Text("1. Blink & Match"),
         automaticallyImplyLeading: false,
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+          TextButton(onPressed: () {
+             HapticFeedback.lightImpact(); 
+             Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(
@@ -282,7 +290,10 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
               color: Colors.black87,
               child: Center(
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(_calculateScores()),
+                  onPressed: () { 
+                    HapticFeedback.lightImpact();
+                    Navigator.of(context).pop(_calculateScores());
+                  },
                   icon: const Icon(Icons.arrow_forward),
                   label: const Text("NEXT GAME"),
                   style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(20)),

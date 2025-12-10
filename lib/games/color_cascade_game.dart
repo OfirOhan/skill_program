@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ColorCascadeGame extends StatefulWidget {
   const ColorCascadeGame({Key? key}) : super(key: key);
@@ -160,9 +161,11 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
     if (perfect) {
       totalCorrect++;
       totalPrecision += 1.0;
+      HapticFeedback.mediumImpact();
       _showFeedback(true);
     } else {
       totalPrecision += (score / checks);
+      HapticFeedback.heavyImpact();
       _showFeedback(false);
     }
   }
@@ -170,6 +173,7 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   // --- ROUND 2/3/4 LOGIC (Grid Tap) ---
   void _onGridTap(int index) {
     if (isGameOver || feedbackColor != null) return;
+    HapticFeedback.lightImpact();
 
     final rt = DateTime.now().millisecondsSinceEpoch - startMs;
     reactionTimes.add(rt);
@@ -177,8 +181,10 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
     if (index == oddOneIndex) {
       totalCorrect++;
       totalPrecision += 1.0;
+      HapticFeedback.mediumImpact();
       _showFeedback(true);
     } else {
+      HapticFeedback.heavyImpact();
       _showFeedback(false);
     }
   }
@@ -255,7 +261,10 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
               Text("Accuracy: ${(totalCorrect / 4 * 100).toInt()}%", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(grade()),
+                onPressed: () { 
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)),
@@ -270,7 +279,10 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
       appBar: AppBar(
         title: Text("11. Color Cascade ($remainingSeconds)"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        actions: [TextButton(onPressed: () {
+           HapticFeedback.lightImpact();
+           Navigator.of(context).pop(null);
+        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
       ),
       body: Stack(
         children: [
