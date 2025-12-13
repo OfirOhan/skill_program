@@ -21,12 +21,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   List<int> userAnswer = [];
 
   bool isMemorizing = true;
-  bool isGameOver = false;
   String instruction = "";
-
-  // Feedback State (New)
-  String? feedbackMessage;
-  Color? feedbackColor;
 
   // Round Config
   static const int totalRounds = 5;
@@ -38,16 +33,17 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   int roundSeconds = 15;
   int startInputMs = 0;
 
-  // Metrics
-  int correctRecall = 0;
-  int correctProcess = 0;
+  // --- METRICS (Partial Credit) ---
+  double sumRecallAccuracy = 0.0;
+  double sumProcessAccuracy = 0.0;
+  double sumMathAccuracy = 0.0;
+  double sumTotalAccuracy = 0.0;
   int totalProcessTime = 0;
 
-  // Skill tracking
+  // Skill tracking (Denominators)
   int recallTrials = 0;
   int processTrials = 0;
   int mathTrials = 0;
-  int mathCorrect = 0;
 
   @override
   void initState() {
@@ -73,15 +69,13 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     });
   }
 
-  void _finishGame() {
-    _roundTimer?.cancel();
-    _memoTimer?.cancel();
-    setState(() => isGameOver = true);
-  }
-
   void _startRound() {
+    // Game Over Check -> Immediate Exit
     if (roundsPlayed >= totalRounds) {
-      _finishGame();
+      _roundTimer?.cancel();
+      _memoTimer?.cancel();
+      // Return the grade immediately without a summary screen
+      Navigator.of(context).pop(grade());
       return;
     }
 
@@ -101,7 +95,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     });
 
     _memoTimer = Timer(const Duration(milliseconds: 3000), () {
-      if (!mounted || isGameOver) return;
+      if (!mounted) return;
 
       setState(() {
         isMemorizing = false;
@@ -128,7 +122,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   }
 
   void onKeyTap(String value) {
-    if (isGameOver || isMemorizing || feedbackMessage != null) return;
+    if (isMemorizing) return;
     HapticFeedback.lightImpact();
     setState(() {
       if (value == "DEL") {
@@ -147,114 +141,122 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
-    bool isCorrect = listEquals(userAnswer, expected);
-    _processResult(isCorrect);
+    _processResult();
   }
 
   void _submitAnswer() {
     _roundTimer?.cancel();
-    bool isCorrect = listEquals(userAnswer, expected);
-    _processResult(isCorrect);
+    _processResult();
   }
 
-  void _processResult(bool isCorrect) {
-    // 1. Record Stats
-    if (isCorrect) {
-      final rt = DateTime.now().millisecondsSinceEpoch - startInputMs;
-      totalProcessTime += rt;
+  void _processResult() {
+    // 1. Calculate Accuracy (Partial Credit)
+    int matches = 0;
+    int len = expected.length;
 
-      if (instruction.contains("Recall")) correctRecall++;
-      else correctProcess++;
-
-      if (instruction.contains("Add")) mathCorrect++;
+    // Compare digit by digit up to the shortest length
+    int checkLen = userAnswer.length < len ? userAnswer.length : len;
+    for (int i = 0; i < checkLen; i++) {
+      if (userAnswer[i] == expected[i]) {
+        matches++;
+      }
     }
 
-    // 2. Show Feedback Overlay
-    setState(() {
-      feedbackMessage = isCorrect ? "CORRECT!" : "WRONG!";
-      feedbackColor = isCorrect ? Colors.green : Colors.red;
-    });
-    
-    if (isCorrect) {
-       HapticFeedback.mediumImpact();
+    // Calculate 0.0 - 1.0 score for this specific round
+    double roundAccuracy = len == 0 ? 0.0 : matches / len;
+
+    // 2. Record Stats
+    final rt = DateTime.now().millisecondsSinceEpoch - startInputMs;
+    totalProcessTime += rt;
+
+    if (instruction.contains("Recall")) {
+      sumRecallAccuracy += roundAccuracy;
     } else {
-       HapticFeedback.heavyImpact();
+      sumProcessAccuracy += roundAccuracy;
     }
 
-    // 3. Delay before next round
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      if (!mounted) return;
-      setState(() {
-        feedbackMessage = null; // Hide overlay
-      });
-      roundsPlayed++;
-      _startRound();
-    });
+    if (instruction.contains("Add")) {
+      sumMathAccuracy += roundAccuracy;
+    }
+
+    sumTotalAccuracy += roundAccuracy;
+
+    // 3. IMMEDIATE NEXT ROUND (No feedback delay)
+    roundsPlayed++;
+    _startRound();
   }
 
   Map<String, double> grade() {
-    double stm = recallTrials == 0 ? 0.0 : correctRecall / recallTrials;
-    if (recallTrials == 0 && roundsPlayed > 0) stm = 1.0;
+    if (roundsPlayed == 0) {
+      return {
+        "Rote Memorization": 0.0,
+        "Working Memory": 0.0,
+        "Quantitative Reasoning": 0.0,
+        "Information Processing Speed": 0.0,
+        "Cognitive Flexibility": 0.0,
+      };
+    }
 
-    double wm = processTrials == 0 ? 0.0 : correctProcess / processTrials;
-    if (processTrials == 0 && roundsPlayed > 0) wm = stm;
+    // --- Core Accuracies (no guessing / no imputation) ---
+    double roteMem = recallTrials > 0
+        ? (sumRecallAccuracy / recallTrials).clamp(0.0, 1.0)
+        : 0.0;
 
-    double avgTime = roundsPlayed == 0 ? 2000 : totalProcessTime / roundsPlayed;
-    double speedScore = (1.0 - ((avgTime - 2000) / 8000)).clamp(0.0, 1.0);
+    double workingMem = processTrials > 0
+        ? (sumProcessAccuracy / processTrials).clamp(0.0, 1.0)
+        : 0.0;
 
-    double numReason = mathTrials == 0 ? 0.0 : mathCorrect / mathTrials;
-    if (mathTrials == 0) numReason = wm;
+    double quantitative = mathTrials > 0
+        ? (sumMathAccuracy / mathTrials).clamp(0.0, 1.0)
+        : 0.0;
 
-    double ltm = (wm * 0.7 + speedScore * 0.3).clamp(0.0, 1.0);
-    double totalAcc = roundsPlayed == 0 ? 0.0 : (correctRecall + correctProcess) / roundsPlayed;
+    // --- Information Processing Speed (earned, not raw) ---
+    double totalAccuracy = (sumTotalAccuracy / roundsPlayed).clamp(0.0, 1.0);
+    double avgTimeMs = totalProcessTime / roundsPlayed;
+
+    // 4s = excellent, 15s = slow/timeout range
+    double rawSpeed = (1.0 - ((avgTimeMs - 4000) / 11000)).clamp(0.0, 1.0);
+
+    // Speed only counts if you're accurate
+    double processingSpeed = (rawSpeed * totalAccuracy).clamp(0.0, 1.0);
+
+    // --- Cognitive Flexibility (only if 2+ task types occurred) ---
+    final List<double> modes = [];
+    if (recallTrials > 0) modes.add(roteMem);
+    if (processTrials > 0) modes.add(workingMem);
+    if (mathTrials > 0) modes.add(quantitative);
+
+    double cognitiveFlexibility = 0.0;
+    if (modes.length >= 2) {
+      double mean = modes.reduce((a, b) => a + b) / modes.length;
+
+      double variance = 0.0;
+      for (final v in modes) {
+        variance += pow(v - mean, 2).toDouble();
+      }
+      variance /= modes.length;
+
+      double stdDev = sqrt(variance);
+
+      // Lower variance across modes = better flexibility
+      cognitiveFlexibility = (1.0 - stdDev).clamp(0.0, 1.0);
+    } else {
+      // Not enough evidence of switching
+      cognitiveFlexibility = 0.0;
+    }
 
     return {
-      "Short-Term Memory": stm,
-      "Working Memory": wm,
-      "Long-Term Recall": ltm,
-      "Information Processing Speed": speedScore,
-      "Problem Decomposition": wm,
-      "Numerical Reasoning": numReason,
-      "Attention to Detail": totalAcc,
+      "Rote Memorization": roteMem,
+      "Working Memory": workingMem,
+      "Quantitative Reasoning": quantitative,
+      "Information Processing Speed": processingSpeed,
+      "Cognitive Flexibility": cognitiveFlexibility,
     };
   }
 
+
   @override
   Widget build(BuildContext context) {
-    if (isGameOver) {
-      return Scaffold(
-        appBar: AppBar(title: const Text("3. Digit Shuffle"), automaticallyImplyLeading: false),
-        body: Container(
-          width: double.infinity,
-          color: Colors.black87,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 80),
-              const SizedBox(height: 20),
-              const Text("Section Complete!", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              Text("Score: ${(correctRecall + correctProcess)} / $totalRounds", style: const TextStyle(color: Colors.white70, fontSize: 18)),
-              const SizedBox(height: 40),
-              ElevatedButton.icon(
-                onPressed: () {
-                   HapticFeedback.lightImpact();
-                   Navigator.of(context).pop(grade());
-                },
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text("NEXT GAME"),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: Text("3. Digit Shuffle (${roundsPlayed + 1}/$totalRounds)"),
@@ -271,117 +273,91 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
           }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              // --- DISPLAY AREA ---
-              Expanded(
-                flex: 4,
-                child: Container(
-                  width: double.infinity,
-                  color: Colors.grey[50],
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isMemorizing) ...[
-                        const Text("MEMORIZE", style: TextStyle(color: Colors.grey, letterSpacing: 2, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 20),
-                        Text(
-                            sequence.join(' '),
-                            style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.black87)
-                        ),
-                      ] else ...[
-                        Text(
-                            instruction,
-                            style: const TextStyle(fontSize: 24, color: Colors.indigo, fontWeight: FontWeight.bold)
-                        ),
-                        const SizedBox(height: 30),
-                        Container(
-                          height: 60,
-                          margin: const EdgeInsets.symmetric(horizontal: 20),
-                          decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey[400]!, width: 2))
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                              userAnswer.join(' '),
-                              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 4)
-                          ),
-                        ),
-                      ]
-                    ],
-                  ),
-                ),
-              ),
-
-              // --- KEYPAD ---
-              if (!isMemorizing)
-                Expanded(
-                  flex: 5,
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    color: Colors.white,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildKey("1"), _buildKey("2"), _buildKey("3"),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildKey("4"), _buildKey("5"), _buildKey("6"),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildKey("7"), _buildKey("8"), _buildKey("9"),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildActionKey("DEL", Colors.red[50]!, Colors.red),
-                              _buildKey("0"),
-                              _buildActionKey("GO", Colors.green[50]!, Colors.green),
-                            ],
-                          ),
-                        ),
-                      ],
+          // --- DISPLAY AREA ---
+          Expanded(
+            flex: 4,
+            child: Container(
+              width: double.infinity,
+              color: Colors.grey[50],
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isMemorizing) ...[
+                    const Text("MEMORIZE", style: TextStyle(color: Colors.grey, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    Text(
+                        sequence.join(' '),
+                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.black87)
                     ),
-                  ),
-                ),
-            ],
+                  ] else ...[
+                    Text(
+                        instruction,
+                        style: const TextStyle(fontSize: 24, color: Colors.indigo, fontWeight: FontWeight.bold)
+                    ),
+                    const SizedBox(height: 30),
+                    Container(
+                      height: 60,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey[400]!, width: 2))
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                          userAnswer.join(' '),
+                          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 4)
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
           ),
 
-          // --- FEEDBACK OVERLAY ---
-          if (feedbackMessage != null)
-            Container(
-              color: feedbackColor!.withOpacity(0.9),
-              child: Center(
+          // --- KEYPAD ---
+          if (!isMemorizing)
+            Expanded(
+              flex: 5,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                color: Colors.white,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                        feedbackColor == Colors.green ? Icons.check_circle_outline : Icons.cancel_outlined,
-                        color: Colors.white, size: 100
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildKey("1"), _buildKey("2"), _buildKey("3"),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    Text(feedbackMessage!, style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    if (feedbackColor == Colors.red)
-                      Text("Answer: ${expected.join(' ')}", style: const TextStyle(color: Colors.white, fontSize: 20)),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildKey("4"), _buildKey("5"), _buildKey("6"),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildKey("7"), _buildKey("8"), _buildKey("9"),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildActionKey("DEL", Colors.red[50]!, Colors.red),
+                          _buildKey("0"),
+                          _buildActionKey("GO", Colors.green[50]!, Colors.green),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),

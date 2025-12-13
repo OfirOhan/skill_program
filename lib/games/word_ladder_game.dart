@@ -116,25 +116,59 @@ class _WordLadderGameState extends State<WordLadderGame> {
   }
 
   Map<String, double> grade() {
-    double accuracy = items.isEmpty ? 0.0 : correctCount / items.length;
-    double avgRt = reactionTimes.isEmpty ? 4000 : reactionTimes.reduce((a,b)=>a+b) / reactionTimes.length;
+    final int n = items.length;
+    if (n == 0) {
+      return {
+        "Abstract Thinking": 0.0,
+        "Inductive Reasoning": 0.0,
+        "Information Processing Speed": 0.0,
+        "Decision Under Pressure": 0.0,
+        "Verbal Fluency": 0.0,
+      };
+    }
 
-    // Adjusted for difficulty: 2.5s is fast now
-    double speedScore = (1.0 - ((avgRt - 2500) / 5000)).clamp(0.0, 1.0);
+    // Accuracy: % correct
+    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
 
-    // Deep Semantic Logic: Did they get the 3x3 grids right? (Last 2 items)
-    // We infer abstract reasoning from overall high score on this hard set.
-    double abstractLogic = accuracy > 0.8 ? 1.0 : accuracy * 0.7;
+    // Avg RT only on answered questions (timeouts aren't included in reactionTimes)
+    // We must account for timeouts implicitly: low accuracy will gate speed anyway.
+    final double avgRt = reactionTimes.isEmpty
+        ? (timePerQuestion * 1000).toDouble()
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+
+    // Raw speed: 1500ms = excellent, 15000ms = very slow
+    // (These are hard, so "fast" isn't 400ms like reflex games.)
+    final double rawSpeed =
+    (1.0 - ((avgRt - 1500.0) / 13500.0)).clamp(0.0, 1.0);
+
+    // Earned speed: speed only counts if you are accurate
+    final double earnedSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+
+    // Pressure handling: emphasize maintaining performance under timer.
+    // If accuracy is high AND they are not slow, they handled pressure.
+    final double pressure =
+    (0.7 * accuracy + 0.3 * rawSpeed).clamp(0.0, 1.0);
+
+    // Inductive reasoning: this game is “infer the rule from examples”.
+    // We use accuracy, but slightly reward solving faster (less trial-and-error).
+    final double inductive =
+    (0.8 * accuracy + 0.2 * earnedSpeed).clamp(0.0, 1.0);
+
+    // Abstract thinking: same core signal, but weighted-accuracy-like feel.
+    // These items are all abstract; we can treat accuracy as the main proxy.
+    final double abstractThinking = accuracy;
+
+    // Verbal fluency (semantic access speed): speed matters more than accuracy,
+    // but still gated by accuracy to avoid fast-guessing.
+    final double verbalFluency =
+    (0.6 * earnedSpeed + 0.4 * accuracy).clamp(0.0, 1.0);
 
     return {
-      "Verbal Reasoning": accuracy,
-      "Long-Term Recall": accuracy * 0.8,
-      "Analytical Thinking": (accuracy * 0.6 + speedScore * 0.4).clamp(0.0, 1.0),
-      "Pattern Recognition (linguistic)": accuracy,
-      "Storytelling Ability": accuracy * 0.8,
-      "Cultural Sensitivity": 1.0,
-      "Active Listening": accuracy,
-      "Abstract Reasoning": abstractLogic, // New metric for hard questions
+      "Abstract Thinking": abstractThinking,
+      "Inductive Reasoning": inductive,
+      "Information Processing Speed": earnedSpeed,
+      "Decision Under Pressure": pressure,
+      "Verbal Fluency": verbalFluency,
     };
   }
 
@@ -327,28 +361,28 @@ List<SymbolItem> _generateItems() {
         2 // Microbe/Bacteria
     ),
 
-    // 2. Functional Hierarchy (Hard)
-    SymbolItem(
-        "SYSTEMS",
-        "🧱 : 🏰\n⬇️\n🧬 : ❓",
-        ["🩸", "🧑", "🏥", "🧪"],
-        1 // Dinosaur (DNA builds the Organism)
-    ),
-
-    // 3. Conceptual Math (Energy)
-    SymbolItem(
-        "CONCEPT MATH",
-        "☀️ + 🌱 = 🌻\n⚡ + 💡 = ❓",
-        ["🔦", "🔋", "🔌", "🕯️"],
-        0 // Flashlight/Beam (Light is produced)
-    ),
-
-    // 4. Conceptual Math (Result)
+    // 2. Conceptual Math (Result)
     SymbolItem(
         "CONCEPT MATH",
         "🐛 + ⏳ = 🦋\n🌱 + ☀️ = ❓",
         ["🌻", "🌱", "🌫️", "💦"],
         0 //
+    ),
+
+    // 3. Conceptual Math (Energy)
+    SymbolItem(
+        "CONCEPT MATH",
+        "🚗 + ⛽ = 💨\n📱 + ⚡ = ❓",
+        ["🔋", "📴", "🔨", "🧊"],
+        0 // Green Battery (Phone + Energy = Charged)
+    ),
+
+    // 4. Functional Hierarchy (Hard)
+    SymbolItem(
+        "SYSTEMS",
+        "🧱 : 🏰\n⬇️\n🧬 : ❓",
+        ["🩸", "🧑", "🏥", "🧪"],
+        1 // Dinosaur (DNA builds the Organism)
     ),
 
     SymbolItem(
@@ -361,7 +395,7 @@ List<SymbolItem> _generateItems() {
     // 6. SYSTEMS HIERARCHY (Genius 3x3)
     SymbolItem(
         "EMERGENCE — INSIGHT (very hard)",
-        "✍️ ➡️ 🗂️ ➡️ ❓\n⚗️ ➡️ 🧫 ➡️ ❓\n🔍 ➡️ 📊 ➡️ ❓",
+        "✍️ ➡️ 🗂️ ➡️ ❓\n🧫 ➡️ 🔬 ➡️ ❓\n🔍 ➡️ 📊 ➡️ ❓",
         ["📚", "💡", "🏷️", "📎"],
         1 // 💡 — the three rows produce 'insight' / 'meaning'
     ),

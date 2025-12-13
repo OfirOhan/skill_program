@@ -124,95 +124,94 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     _startRound();
   }
 
-  // --- MODIFIED & VALIDATED SKILL EXTRACTION ---
   Map<String, double> grade() {
-    // 1. Initialize Counters
-    double logicScoreSum = 0;
-    double logicMaxSum = 0;
+    if (itemResults.isEmpty) {
+      return {
+        "Inductive Reasoning": 0.0,
+        "Deductive Reasoning": 0.0,
+        "Quantitative Reasoning": 0.0,
+        "Abstract Thinking": 0.0,
+        "Pattern Recognition": 0.0,
+        "Information Processing Speed": 0.0,
+      };
+    }
 
-    double numericScoreSum = 0;
-    double numericMaxSum = 0;
-
-    double correctWeighted = 0;
-    double totalDifficulty = 0;
+    double totalDiff = 0.0;
+    double correctWeighted = 0.0;
     int correctCount = 0;
 
-    // 2. Iterate through EXACT results to categorize performance
-    for (int i = 0; i < itemResults.length; i++) {
-      VisualMatrixItem item = items[i];
-      bool correct = itemResults[i];
+    double inductiveSum = 0.0, inductiveMax = 0.0;
+    double deductiveSum = 0.0, deductiveMax = 0.0;
+    double quantSum = 0.0, quantMax = 0.0;
 
-      // Global stats
-      totalDifficulty += item.difficulty;
+    for (int i = 0; i < itemResults.length; i++) {
+      final item = items[i];
+      final bool correct = itemResults[i];
+
+      totalDiff += item.difficulty;
       if (correct) {
         correctWeighted += item.difficulty;
         correctCount++;
       }
 
-      // Categorization for Reliability
-      // Items 2, 3, 5 are Numerical (Subtraction, Cyclic, Arithmetic)
-      // Items 1, 4, 6 are Logic/Spatial (Rotation, Sudoku, XOR)
-      bool isNumerical = ["Subtraction", "Cyclic Pattern", "Arithmetic"].contains(item.logicDescription);
+      final desc = item.logicDescription;
 
-      if (isNumerical) {
-        numericMaxSum += item.difficulty;
-        if (correct) numericScoreSum += item.difficulty;
-      } else {
-        logicMaxSum += item.difficulty;
-        if (correct) logicScoreSum += item.difficulty;
+      // Inductive: infer the rule from examples
+      if (desc == "Rotation" || desc == "Cyclic Pattern" || desc == "Arithmetic") {
+        inductiveMax += item.difficulty;
+        if (correct) inductiveSum += item.difficulty;
+      }
+
+      // Deductive: apply strict constraints / rule logic
+      if (desc == "Sudoku Logic (Unique Row/Col)" || desc == "Column XOR") {
+        deductiveMax += item.difficulty;
+        if (correct) deductiveSum += item.difficulty;
+      }
+
+      // Quantitative: numeric operations / counts
+      if (desc == "Subtraction" || desc == "Arithmetic") {
+        quantMax += item.difficulty;
+        if (correct) quantSum += item.difficulty;
       }
     }
 
-    // 3. Calculate Core Metrics (0.0 - 1.0)
-    double globalAccuracyWeighted = totalDifficulty == 0 ? 0.0 : correctWeighted / totalDifficulty;
-    double globalAccuracyRaw = items.isEmpty ? 0.0 : correctCount / items.length;
+    final double abstractThinking =
+    totalDiff == 0 ? 0.0 : (correctWeighted / totalDiff).clamp(0.0, 1.0);
 
-    // 4. Calculate Specific Skill Scores
-    // Use raw 0.0 if they didn't encounter any questions of that type (e.g., quit early)
-    double logicalReasoningScore = logicMaxSum == 0 ? 0.0 : logicScoreSum / logicMaxSum;
-    double numericalReasoningScore = numericMaxSum == 0 ? 0.0 : numericScoreSum / numericMaxSum;
+    final double inductive =
+    inductiveMax == 0 ? 0.0 : (inductiveSum / inductiveMax).clamp(0.0, 1.0);
 
-    // 5. Time & Efficiency
-    double avgTimeMs = itemTimes.isEmpty ? 15000 : itemTimes.reduce((a, b) => a + b) / itemTimes.length;
-    double speedFactor = (1.0 - (avgTimeMs / 15000)).clamp(0.0, 1.0);
-    double efficiency = globalAccuracyWeighted * (0.5 + (speedFactor * 0.5));
+    final double deductive =
+    deductiveMax == 0 ? 0.0 : (deductiveSum / deductiveMax).clamp(0.0, 1.0);
+
+    final double quantitative =
+    quantMax == 0 ? 0.0 : (quantSum / quantMax).clamp(0.0, 1.0);
+
+    // Speed (earned)
+    final double avgTimeMs = itemTimes.isEmpty
+        ? 15000.0
+        : itemTimes.reduce((a, b) => a + b) / itemTimes.length;
+
+    final double rawSpeed = (1.0 - (avgTimeMs / 15000.0)).clamp(0.0, 1.0);
+
+    // Gate speed by overall correctness (abstractThinking is your global weighted accuracy)
+    final double infoSpeed = (rawSpeed * abstractThinking).clamp(0.0, 1.0);
+
+    // Pattern recognition: accuracy-first + a small speed component (not gated to avoid double-counting)
+    final double rawAcc = items.isEmpty ? 0.0 : (correctCount / items.length).clamp(0.0, 1.0);
+    final double patternRecognition = (0.8 * rawAcc + 0.2 * rawSpeed).clamp(0.0, 1.0);
 
     return {
-      // RELIABLE: Based strictly on "Rotation", "Sudoku", and "XOR" questions.
-      "Logical Reasoning": logicalReasoningScore,
-
-      // RELIABLE: Based strictly on "Subtraction", "Cyclic", and "Arithmetic" questions.
-      // This is now a direct measurement, not a guess.
-      "Numerical Reasoning": numericalReasoningScore,
-
-      // RELIABLE: Matrix tests are the definition of abstract reasoning.
-      // Weighted global accuracy is the standard metric here.
-      "Abstract Reasoning": globalAccuracyWeighted,
-
-      // RELIABLE: System understanding implies grasping the whole grid.
-      // We weight the "Logic" questions higher here as they represent system rules (Sudoku/XOR)
-      // more than the counting ones.
-      "System Understanding": (logicalReasoningScore * 0.7) + (globalAccuracyWeighted * 0.3),
-
-      // RELIABLE: Pattern rec requires seeing it (Accuracy) + seeing it fast (Speed).
-      "Pattern Recognition": (globalAccuracyRaw * 0.7) + (speedFactor * 0.3),
-
-      // RELIABLE: Visual perception is foundational. If you got *any* right, you have some perception.
-      // Unweighted accuracy is best here (getting the easy visual ones counts).
-      "Visual Perception Accuracy": globalAccuracyRaw,
-
-      // RELIABLE: Efficiency (Accuracy + Speed) is the definition of analytical capability.
-      "Analytical Thinking": efficiency,
-
-      // RELIABLE: Decomposition is required for the hardest levels (Diff 5 & 6).
-      // If the user reached and solved those, this score will be high.
-      // If they failed the hard ones, this score naturally drops.
-      "Problem Decomposition": globalAccuracyWeighted,
-
-      // Note: "Mathematical Skill" and "Scientific Thinking" remain removed
-      // as they are inextricably low-signal in this specific game format.
+      "Inductive Reasoning": inductive,
+      "Deductive Reasoning": deductive,
+      "Quantitative Reasoning": quantitative,
+      "Abstract Thinking": abstractThinking,
+      "Pattern Recognition": patternRecognition,
+      "Information Processing Speed": infoSpeed,
     };
   }
+
+
 
   @override
   Widget build(BuildContext context) {

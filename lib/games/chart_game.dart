@@ -118,21 +118,53 @@ class _ChartDashGameState extends State<ChartDashGame> {
   }
 
   Map<String, double> grade() {
-    double accuracy = questions.isEmpty ? 0.0 : correctCount / questions.length;
-    double avgRt = reactionTimes.isEmpty ? 5000 : reactionTimes.reduce((a,b)=>a+b) / reactionTimes.length;
+    final int n = questions.length;
+    if (n == 0) {
+      return {
+        "Quantitative Reasoning": 0.0,
+        "Inductive Reasoning": 0.0,
+        "Visual Acuity": 0.0,
+        "Information Processing Speed": 0.0,
+        "Decision Under Pressure": 0.0,
+      };
+    }
 
-    // Speed scoring: 5s avg is fast (1.0), 15s avg is slow (0.0) because questions are harder
-    double speedScore = (1.0 - ((avgRt - 5000) / 10000)).clamp(0.0, 1.0);
+    // Accuracy
+    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
+
+    // Average reaction time (answered questions only)
+    final double avgRt = reactionTimes.isEmpty
+        ? 15000.0
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+
+    // Raw speed: these are harder than reflex games, so:
+    // 4000ms = fast, 20000ms = slow
+    final double rawSpeed = (1.0 - ((avgRt - 4000.0) / 16000.0)).clamp(0.0, 1.0);
+
+    // Earned speed: speed only matters if correct (anti-guess)
+    final double infoSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+
+    // Decision under pressure: mostly accuracy, small speed component
+    final double pressure = (0.8 * accuracy + 0.2 * rawSpeed).clamp(0.0, 1.0);
+
+    // Skill mapping (conservative because only 3 items)
+    final double quantitative = (0.85 * accuracy + 0.15 * infoSpeed).clamp(0.0, 1.0);
+
+    // Inductive reasoning here is "interpreting what to compute" from the question+chart
+    final double inductive = (0.75 * accuracy + 0.25 * infoSpeed).clamp(0.0, 1.0);
+
+    // Visual acuity = reading values/labels correctly; accuracy is the best proxy available
+    final double visualAcuity = accuracy;
 
     return {
-      "Data Interpretation": accuracy,
-      "Statistical Skill": accuracy * 0.9,
-      "Numerical Reasoning": (accuracy * 0.7 + speedScore * 0.3).clamp(0.0, 1.0),
-      "Analytical Thinking": accuracy,
-      "Risk Assessment": accuracy * 0.8,
-      "Attention to Detail": (accuracy * 0.6 + speedScore * 0.4).clamp(0.0, 1.0),
+      "Quantitative Reasoning": quantitative,
+      "Inductive Reasoning": inductive,
+      "Visual Acuity": visualAcuity,
+      "Information Processing Speed": infoSpeed,
+      "Decision Under Pressure": pressure,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

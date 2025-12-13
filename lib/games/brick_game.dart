@@ -184,101 +184,120 @@ class _BrickGameState extends State<BrickGame> {
   }
 
   Map<String, double> calculateScores() {
+    // Helper: count only "valid" ideas (contain at least one known real word)
+    bool isValidIdea(String s) => _containsRealWord(s);
+
     if (ideas.isEmpty) {
       return {
-        "Creativity (Divergent Thinking)": 0.0,
-        "Creativity (Convergent Thinking)": convergentChosen ? 0.5 : 0.0,
-        "Idea Generation Fluency": 0.0,
-        "Design Thinking": 0.0,
-        "Improvisation Ability": 0.0,
-        "Aesthetic Sensitivity": 0.0,
-        "Problem Decomposition (creative version)": 0.0,
+        "Ideation Fluency": 0.0,
+        "Divergent Thinking": 0.0,
+        "Cognitive Flexibility": 0.0,
+        "Planning & Prioritization": 0.0,
+        "Decision Under Pressure": 0.0,
+        "Verbal Fluency": 0.0,
       };
     }
 
-    const double idealIdeaCount = 9.0;
-    final fluency = (ideaCount / idealIdeaCount).clamp(0.0, 1.0);
+    final int totalIdeas = ideas.length;
+    final List<String> validIdeas = ideas.where(isValidIdea).toList();
+    final int validCount = validIdeas.length;
 
-    double sumOriginality = 0.0;
-    for (final idea in ideas) {
-      sumOriginality += _originalityForIdea(idea, keywordFrequency);
+    // -----------------------------
+    // 1) Ideation Fluency (quantity)
+    // -----------------------------
+    // "usable ideas per 45s" – only count valid ones
+    const double idealValidCount = 9.0; // calibrated for 45s
+    final double ideationFluency = (validCount / idealValidCount).clamp(0.0, 1.0);
+
+    // -------------------------------------------------
+    // 2) Divergent Thinking (originality across ideas)
+    // -------------------------------------------------
+    // Uses your frequency-based originality heuristic, averaged over valid ideas only.
+    double sumOrig = 0.0;
+    for (final idea in validIdeas) {
+      sumOrig += _originalityForIdea(idea, keywordFrequency);
     }
-    final originality = (sumOriginality / ideaCount).clamp(0.0, 1.0);
+    final double divergentThinking = (validCount == 0 ? 0.0 : (sumOrig / validCount)).clamp(0.0, 1.0);
 
+    // -------------------------------------------------
+    // 3) Cognitive Flexibility (category diversity)
+    // -------------------------------------------------
+    // Count distinct categories among valid ideas.
     final Set<String> categories = {};
-    for (final idea in ideas) {
-      if (!_containsRealWord(idea)) continue;
+    for (final idea in validIdeas) {
       final cat = _detectCategory(idea);
       if (cat != null) categories.add(cat);
     }
-    final flexibility = (categories.length / 4.0).clamp(0.0, 1.0);
+    // With your current category map, 4+ distinct categories is already strong
+    final double cognitiveFlexibility = (categories.length / 4.0).clamp(0.0, 1.0);
 
-    double sumElab = 0.0;
-    for (final idea in ideas) sumElab += _elaborationScore(idea);
-    final elaboration = (sumElab / ideaCount).clamp(0.0, 1.0);
-
-    final divergentCreativity = (
-        fluency * 0.30 +
-            originality * 0.30 +
-            flexibility * 0.25 +
-            elaboration * 0.15
-    ).clamp(0.0, 1.0);
-
-    double convergentCreativity = 0.0;
+    // -------------------------------------------------
+    // 4) Planning & Prioritization (best-pick quality)
+    // -------------------------------------------------
+    // Only measurable if user actually picked one.
+    // We score the selected idea by: originality + elaboration + (practicality bonus)
+    double planningPrioritization = 0.0;
     if (convergentChosen && selectedOptionIndex >= 0 && selectedOptionIndex < ideas.length) {
       final sel = ideas[selectedOptionIndex];
-      final selOrig = _originalityForIdea(sel, keywordFrequency);
-      final selElab = _elaborationScore(sel);
-      final selCat = _detectCategory(sel);
-      final isArt = (selCat == 'art') ? 1.0 : 0.0;
-      convergentCreativity = (selOrig * 0.6 + selElab * 0.3 + isArt * 0.1).clamp(0.0, 1.0);
-    }
+      final selValid = isValidIdea(sel);
 
-    final ideaRateScore = (ideaCount / idealIdeaCount).clamp(0.0, 1.0);
+      if (selValid) {
+        final selOrig = _originalityForIdea(sel, keywordFrequency);
+        final selElab = _elaborationScore(sel);
+        final selCat = _detectCategory(sel);
 
-    int designCount = 0;
-    for (final idea in ideas) {
-      final cat = _detectCategory(idea);
-      if (cat == null) continue;
-      if (['practical', 'construction', 'survival', 'utility', 'furniture', 'garden'].contains(cat)) designCount++;
-    }
-    final designThinking = (designCount / ideaCount).clamp(0.0, 1.0);
+        // Practical selection bonus: indicates prioritizing utility (not required, just mild)
+        final double practicalBonus = (selCat != null && selCat != 'danger') ? 1.0 : 0.0;
 
-    final earliestTimestamp = ideaTimestamps.isNotEmpty ? ideaTimestamps.last : null;
-    double speedScore = 0.0;
-    if (earliestTimestamp != null && earliestTimestamp > 0) {
-      speedScore = (1.0 - (earliestTimestamp / 7000.0)).clamp(0.0, 1.0);
-    }
-    final burstCount = ideaTimestamps.where((t) => t <= 10000).length;
-    final burstScore = (burstCount / 3.0).clamp(0.0, 1.0);
-    final improvisation = (speedScore * 0.5 + burstScore * 0.5);
-
-    int artCount = 0;
-    for (final idea in ideas) {
-      final cat = _detectCategory(idea);
-      if (cat == 'art') artCount++;
-    }
-    final baseAesthetic = (artCount / ideaCount).clamp(0.0, 1.0);
-    double aestheticFinal = baseAesthetic;
-    if (convergentChosen && selectedOptionIndex >= 0 && selectedOptionIndex < ideas.length) {
-      final selCat = _detectCategory(ideas[selectedOptionIndex]);
-      if (selCat == 'art') {
-        aestheticFinal = (aestheticFinal * 0.6 + 1.0 * 0.4).clamp(0.0, 1.0);
+        planningPrioritization = (selOrig * 0.55 + selElab * 0.35 + practicalBonus * 0.10).clamp(0.0, 1.0);
+      } else {
+        planningPrioritization = 0.0;
       }
+    } else {
+      planningPrioritization = 0.0;
     }
 
-    final problemDecomp = (categories.length / 5.0).clamp(0.0, 1.0);
+    // -------------------------------------------------
+    // 5) Decision Under Pressure (did they decide + not too late)
+    // -------------------------------------------------
+    // Minimal honest signal: made a choice at all.
+    // Optional timing signal: the convergent phase is short; we can reward having enough ideas early.
+    // We approximate "pressure handling" by how many valid ideas were generated in the first 10s.
+    final int earlyValid = ideaTimestamps
+        .asMap()
+        .entries
+        .where((e) => e.value <= 10000 && isValidIdea(ideas[e.key]))
+        .length;
+
+    final double decisionUnderPressure = (
+        (convergentChosen ? 0.7 : 0.0) +
+            (min(earlyValid / 3.0, 1.0) * 0.3)
+    ).clamp(0.0, 1.0);
+
+    // -------------------------------------------------
+    // 6) Verbal Fluency (usable word output rate)
+    // -------------------------------------------------
+    // Measures ability to express ideas quickly in language.
+    // Use valid ideas rate + slight elaboration.
+    double sumElab = 0.0;
+    for (final idea in validIdeas) sumElab += _elaborationScore(idea);
+    final double avgElab = validCount == 0 ? 0.0 : (sumElab / validCount);
+
+    final double verbalFluency = (
+        0.75 * ideationFluency +
+            0.25 * avgElab
+    ).clamp(0.0, 1.0);
 
     return {
-      "Creativity (Divergent Thinking)": divergentCreativity,
-      "Creativity (Convergent Thinking)": convergentCreativity,
-      "Idea Generation Fluency": ideaRateScore,
-      "Design Thinking": designThinking,
-      "Improvisation Ability": improvisation,
-      "Aesthetic Sensitivity": aestheticFinal,
-      "Problem Decomposition (creative version)": problemDecomp,
+      "Ideation Fluency": ideationFluency,
+      "Divergent Thinking": divergentThinking,
+      "Cognitive Flexibility": cognitiveFlexibility,
+      "Planning & Prioritization": planningPrioritization,
+      "Decision Under Pressure": decisionUnderPressure,
+      "Verbal Fluency": verbalFluency,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

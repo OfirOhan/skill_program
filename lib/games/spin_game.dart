@@ -25,6 +25,8 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   Color? feedbackColor;
   String? feedbackText;
 
+  static const int _roundLimitMs = 20000; // 20s timeout penalty for speed scoring
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +66,10 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   void _handleTimeout() {
     _roundTimer?.cancel();
     HapticFeedback.vibrate();
+
+    // Anti-cheat: if you don't answer, you get a max-time reaction time.
+    reactionTimes.add(_roundLimitMs);
+
     _showFeedback(false, isTimeout: true);
   }
 
@@ -114,19 +120,47 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   }
 
   Map<String, double> grade() {
-    double accuracy = levels.isEmpty ? 0.0 : correctCount / levels.length;
-    double avgRt = reactionTimes.isEmpty ? 5000 : reactionTimes.reduce((a,b)=>a+b) / reactionTimes.length;
-    double speedScore = (1.0 - ((avgRt - 2000) / 6000)).clamp(0.0, 1.0);
+    final int n = levels.length;
+    if (n == 0) {
+      return {
+        "Mental Rotation": 0.0,
+        "Spatial Awareness": 0.0,
+        "Pattern Recognition": 0.0,
+        "Information Processing Speed": 0.0,
+        "Decision Under Pressure": 0.0,
+      };
+    }
+
+    // Accuracy (timeouts automatically count as wrong because correctCount doesn't increase)
+    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
+
+    // Avg RT (includes timeout penalty if user didn't answer)
+    final double avgRt = reactionTimes.isEmpty
+        ? _roundLimitMs.toDouble()
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+
+    // Raw speed: 2.5s = fast (1.0), 14s = slow (0.0)
+    final double rawSpeed = (1.0 - ((avgRt - 2500.0) / 11500.0)).clamp(0.0, 1.0);
+
+    // Earned speed: you only "get speed credit" if you're correct (anti-guess)
+    final double earnedSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+
+    final double mentalRotation = (0.80 * accuracy + 0.20 * earnedSpeed).clamp(0.0, 1.0);
+    final double spatialAwareness = (0.70 * accuracy + 0.30 * earnedSpeed).clamp(0.0, 1.0);
+    final double patternRecognition = accuracy;
+
+    // Under pressure: mostly accuracy, small benefit from being quick
+    final double decisionUnderPressure = (0.80 * accuracy + 0.20 * rawSpeed).clamp(0.0, 1.0);
 
     return {
-      "3D Visualization": accuracy,
-      "Spatial Awareness": (accuracy * 0.7 + speedScore * 0.3).clamp(0.0, 1.0),
-      "Visual Perception Accuracy": accuracy,
-      "Pattern Recognition": accuracy * 0.9,
-      "Fine Motor Control": speedScore,
-      "Color Differentiation": 0.5,
+      "Mental Rotation": mentalRotation,
+      "Spatial Awareness": spatialAwareness,
+      "Pattern Recognition": patternRecognition,
+      "Information Processing Speed": earnedSpeed,
+      "Decision Under Pressure": decisionUnderPressure,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

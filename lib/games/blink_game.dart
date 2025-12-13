@@ -180,58 +180,73 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
     });
   }
 
-  // --- GRADING LOGIC (Mapped to your 8 Skills) ---
-  Map<String, double> _calculateScores() {
-    int totalTrials = seq.length;
-    if (totalTrials == 0) return {};
+  Map<String, double> grade() {
+    final int totalTrials = seq.length;
+    if (totalTrials < widget.nBack) {
+      return {
+        "Working Memory": 0.0,
+        "Associative Memory": 0.0,
+        "Response Inhibition": 0.0,
+        "Information Processing Speed": 0.0,
+        "Observation / Vigilance": 0.0,
+      };
+    }
 
-    int totalTargets = hits + misses;
-    int nonTargets = totalTrials - totalTargets;
+    int totalTargets = hits + misses;                 // match trials
+    int totalDistractors = totalTrials - totalTargets; // non-match trials
 
-    // 1. Base Metrics
-    double precision = hits / max(1, hits + falseAlarms);
-    double recall = hits / max(1, totalTargets);
-    double f1Score = (2 * precision * recall) / max(0.001, precision + recall);
+    // Avoid divide-by-zero (no imputation: if a class truly doesn't exist, score becomes 0)
+    if (totalTargets <= 0) totalTargets = 0;
+    if (totalDistractors <= 0) totalDistractors = 0;
 
-    // 2. Reaction Time
-    hitReactionTimes.sort();
-    double medianRt = hitReactionTimes.isEmpty
-        ? 1000
-        : hitReactionTimes[hitReactionTimes.length ~/ 2].toDouble();
+    // --- Accuracy components ---
+    // Precision: when you claim match, how often correct?
+    final double precision = (hits + falseAlarms) == 0 ? 0.0 : (hits / (hits + falseAlarms));
 
-    double normRt = medianRt.clamp(450, 1200);
-    double reactionSpeed = 1 - ((normRt - 450) / 750);
+    // Recall/Sensitivity: out of true matches, how many caught?
+    final double recall = totalTargets == 0 ? 0.0 : (hits / totalTargets);
 
-    // 3. Attention Span (decay across time)
-    double firstHalfAcc = firstHalfTrials == 0 ? 0 : firstHalfHits / max(1, firstHalfTrials);
-    double secondHalfAcc = secondHalfTrials == 0 ? 0 : secondHalfHits / max(1, secondHalfTrials);
+    // Specificity/Inhibition: out of non-matches, how many correctly ignored?
+    final double inhibition = totalDistractors == 0 ? 0.0 : ((totalDistractors - falseAlarms) / totalDistractors);
 
-    double decayScore = (secondHalfAcc / max(0.1, firstHalfAcc)).clamp(0.0, 1.0);
-    if (firstHalfAcc == 0 && secondHalfAcc > 0) decayScore = 1.0;
+    // Working memory: balanced “hit targets without hallucinating”
+    final double f1 = (precision + recall) == 0 ? 0.0 : (2 * precision * recall) / (precision + recall);
 
-    // 4. False Alarm Rate
-    double falseAlarmRate = falseAlarms / max(1, nonTargets);
+    // Associative binding (pos+color): balanced accuracy handles class imbalance
+    final double assoc = ((recall + inhibition) / 2).clamp(0.0, 1.0);
 
-    // Formula: Longest Streak / Total Targets
-    double sustainedAttention = (maxStreak / max(1, totalTargets)).clamp(0.0, 1.0);
+    // --- Vigilance / stability over time (only if both halves have evidence) ---
+    final double firstHalfAcc = firstHalfTrials == 0 ? 0.0 : (firstHalfHits / firstHalfTrials);
+    final double secondHalfAcc = secondHalfTrials == 0 ? 0.0 : (secondHalfHits / secondHalfTrials);
 
-    // --- FINAL NORMALIZED SCORES 0–1 ---
+    double vigilance = 0.0;
+    if (firstHalfTrials > 0 && secondHalfTrials > 0) {
+      vigilance = (1.0 - (firstHalfAcc - secondHalfAcc).abs()).clamp(0.0, 1.0);
+    } else {
+      vigilance = 0.0; // no evidence to claim stability
+    }
+
+    // --- Speed (earned: gated by accuracy) ---
+    final double avgMs = hitReactionTimes.isEmpty
+        ? 1000.0
+        : hitReactionTimes.reduce((a, b) => a + b) / hitReactionTimes.length;
+
+    // 350ms fast .. 1000ms slow
+    final double rawSpeed = (1.0 - ((avgMs - 350.0) / 650.0)).clamp(0.0, 1.0);
+
+    // Gate speed by correctness: fast but wrong should not score high
+    final double speed = (rawSpeed * f1).clamp(0.0, 1.0);
+
     return {
-      // Memory Systems
-      "Working Memory": f1Score,          // Full accuracy measure
-      "Short-Term Memory": recall,        // Pure memory of targets
-
-      // Speed & Attention
-      "Information Processing Speed": reactionSpeed,
-      "Selective Attention": (1.0 - falseAlarmRate).clamp(0.0, 1.0),
-      "Sustained Attention": sustainedAttention,
-      "Attention Span": decayScore,
-
-      // Pattern and Speed
-      "Pattern Recognition": precision,   // Pure ability to detect match pattern
-      "Reaction Time": reactionSpeed,     // Same metric but different semantic meaning
+      "Working Memory": f1.clamp(0.0, 1.0),
+      "Associative Memory": assoc,
+      "Response Inhibition": inhibition.clamp(0.0, 1.0),
+      "Information Processing Speed": speed,
+      "Observation / Vigilance": vigilance,
     };
   }
+
+
 
 
   @override
@@ -292,7 +307,7 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
                 child: ElevatedButton.icon(
                   onPressed: () { 
                     HapticFeedback.lightImpact();
-                    Navigator.of(context).pop(_calculateScores());
+                    Navigator.of(context).pop(grade());
                   },
                   icon: const Icon(Icons.arrow_forward),
                   label: const Text("NEXT GAME"),

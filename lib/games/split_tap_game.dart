@@ -206,30 +206,81 @@ class _SplitTapGameState extends State<SplitTapGame> {
     _nextMathProblem();
   }
 
-  // --- GRADING ---
   Map<String, double> grade() {
-    int totalLeftEvents = leftHits + leftMisses + leftFalseAlarms;
-    double leftAcc = totalLeftEvents == 0 ? 0.0 : leftHits / max(1, totalLeftEvents);
+    // ---------- LEFT TASK METRICS (Go/No-Go) ----------
+    final int leftTargets = leftHits + leftMisses;             // times target appeared
+    final int leftResponses = leftHits + leftFalseAlarms;      // taps made
+    final int leftTotalEvents = leftHits + leftMisses + leftFalseAlarms;
 
-    int totalMathEvents = mathHits + mathWrongs;
-    double rightAcc = totalMathEvents == 0 ? 0.0 : mathHits / max(1, totalMathEvents);
+    // Sensitivity (hit rate) and precision (tap correctness)
+    final double leftRecall = leftTargets == 0 ? 0.0 : (leftHits / leftTargets).clamp(0.0, 1.0);
+    final double leftPrecision = leftResponses == 0 ? 0.0 : (leftHits / leftResponses).clamp(0.0, 1.0);
 
-    double multiTasking = (leftAcc * 0.5 + rightAcc * 0.5).clamp(0.0, 1.0);
-    double selectivity = (1.0 - (leftFalseAlarms / max(1, leftHits + leftFalseAlarms + 5))).clamp(0.0, 1.0);
+    // Inhibition = resisting taps on non-targets (approximated via false alarms)
+    // We don't know true distractor count directly, so we approximate specificity using penalties.
+    final double inhibition = (1.0 - (leftFalseAlarms / max(1, leftFalseAlarms + leftHits))).clamp(0.0, 1.0);
 
-    double avgRt = mathRTs.isEmpty ? 2000 : mathRTs.reduce((a,b)=>a+b) / mathRTs.length;
-    double speedScore = (1.0 - ((avgRt - 800) / 1200)).clamp(0.0, 1.0);
+    // Left performance: balanced (don’t reward conservative or spam tapping)
+    final double leftF1 = (leftPrecision + leftRecall) == 0
+        ? 0.0
+        : (2 * leftPrecision * leftRecall) / (leftPrecision + leftRecall);
+
+    // ---------- RIGHT TASK METRICS (Math) ----------
+    final int mathTotal = mathHits + mathWrongs;
+    final double mathAccuracy = mathTotal == 0 ? 0.0 : (mathHits / mathTotal).clamp(0.0, 1.0);
+
+    final double avgMathRt = mathRTs.isEmpty
+        ? 2000.0
+        : mathRTs.reduce((a, b) => a + b) / mathRTs.length;
+
+    // Raw speed benchmark: 700ms = very fast, 2200ms = very slow
+    final double rawSpeed = (1.0 - ((avgMathRt - 700.0) / 1500.0)).clamp(0.0, 1.0);
+
+    // Earned speed: fast only counts if you're correct
+    final double infoSpeed = (rawSpeed * mathAccuracy).clamp(0.0, 1.0);
+
+    // ---------- DUAL-TASK LOAD (Working Memory) ----------
+    // Working memory here = doing both tasks well simultaneously:
+    // math accuracy + left accuracy (F1), plus slight penalty if either collapses.
+    final double workingMemory = (
+        0.55 * mathAccuracy +
+            0.45 * leftF1
+    ).clamp(0.0, 1.0);
+
+    // ---------- COGNITIVE FLEXIBILITY (Rule switching) ----------
+    // We don’t track per-switch performance directly, so we use a conservative proxy:
+    // If false alarms are high OR recall is low, it indicates difficulty adapting to rule changes.
+    // Penalize instability via false alarms + missed targets.
+    final double instability = (
+        (leftFalseAlarms / max(1, leftTotalEvents)) +
+            (leftMisses / max(1, leftTargets))
+    ).clamp(0.0, 1.0);
+
+    final double cognitiveFlexibility = (1.0 - instability).clamp(0.0, 1.0);
+
+    // ---------- RESPONSE INHIBITION ----------
+    // Directly from inhibition score (don’t tap on non-target)
+    final double responseInhibition = inhibition;
+
+    // ---------- QUANTITATIVE REASONING ----------
+    // Directly from math accuracy
+    final double quantitativeReasoning = mathAccuracy;
+
+    // ---------- DECISION UNDER PRESSURE ----------
+    // Overall quality under timer: accuracy-dominant, with small speed component
+    final double overallAccuracy = (0.5 * mathAccuracy + 0.5 * leftF1).clamp(0.0, 1.0);
+    final double decisionUnderPressure = (0.75 * overallAccuracy + 0.25 * rawSpeed).clamp(0.0, 1.0);
 
     return {
-      "Multi-tasking Ability": multiTasking,
-      "Selective Attention": selectivity,
-      "Sustained Attention": multiTasking * 0.9,
-      "Information Processing Speed": speedScore,
-      "Numerical Reasoning": rightAcc,
-      "Reaction Time": speedScore,
-      "Rule Following Accuracy": (1.0 - (leftFalseAlarms + mathWrongs) / 15.0).clamp(0.0, 1.0),
+      "Working Memory": workingMemory,
+      "Cognitive Flexibility": cognitiveFlexibility,
+      "Response Inhibition": responseInhibition,
+      "Quantitative Reasoning": quantitativeReasoning,
+      "Information Processing Speed": infoSpeed,
+      "Decision Under Pressure": decisionUnderPressure,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

@@ -206,20 +206,56 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   Map<String, double> grade() {
-    double completion = levelsSolved / totalLevels.toDouble();
-    double efficiency = levelsSolved == 0 ? 0.0 : (1.0 - (moves / (levelsSolved * 25))).clamp(0.0, 1.0);
+    final double completion = (levelsSolved / totalLevels.toDouble()).clamp(0.0, 1.0);
+
+    // Efficiency based on moves per solved level.
+    // We normalize by grid size difficulty: later levels are larger (3,4,6).
+    // Since you don’t store per-level moves, we keep it conservative.
+    //
+    // Baseline: ~18 moves per solved level is "good", 35+ is "inefficient".
+    final int solved = levelsSolved;
+    double movesPerSolved = solved == 0 ? 999.0 : (moves / solved);
+
+    // Map movesPerSolved to 0..1
+    double efficiency = 0.0;
+    if (solved > 0) {
+      // 18 -> 1.0, 35 -> 0.0
+      efficiency = (1.0 - ((movesPerSolved - 18.0) / 17.0)).clamp(0.0, 1.0);
+    } else {
+      efficiency = 0.0;
+    }
+
+    // Deductive reasoning: completing levels is the best available proxy.
+    // Small weight from efficiency (solving with fewer contradictions/backtracks).
+    final double deductive = (0.80 * completion + 0.20 * efficiency).clamp(0.0, 1.0);
+
+    // Algorithmic logic: strongly tied to efficiency (systematic search),
+    // but only meaningful if they solved something.
+    final double algorithmic = solved == 0
+        ? 0.0
+        : (0.65 * efficiency + 0.35 * completion).clamp(0.0, 1.0);
+
+    // Systems thinking: connectivity/global flow understanding.
+    // Completion is dominant; efficiency provides a slight refinement.
+    final double systemsThinking = (0.85 * completion + 0.15 * efficiency).clamp(0.0, 1.0);
+
+    // Planning & prioritization: minimize wasted moves.
+    final double planning = efficiency;
+
+    // Decision under pressure: timed levels; with no time logs,
+    // the honest proxy is simply how much they completed within constraints.
+    // Reward completion, with a small reward for efficiency (less dithering).
+    final double pressure = (0.75 * completion + 0.25 * efficiency).clamp(0.0, 1.0);
 
     return {
-      "Programming Logic": completion,
-      "Algorithmic Thinking": (completion * 0.7 + efficiency * 0.3).clamp(0.0, 1.0),
-      "Debugging & Troubleshooting": efficiency,
-      "System Understanding": completion * 0.9,
-      "Technical Documentation Understanding": 0.5,
-      "Problem Decomposition": completion,
-      "Planning & Prioritization": efficiency,
-      "Decision-Making Under Pressure": completion,
+      "Deductive Reasoning": deductive,
+      "Algorithmic Logic": algorithmic,
+      "Systems Thinking": systemsThinking,
+      "Planning & Prioritization": planning,
+      "Decision Under Pressure": pressure,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {
