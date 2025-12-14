@@ -29,6 +29,10 @@ class _WordLadderGameState extends State<WordLadderGame> {
   Color? feedbackColor;
   String? feedbackText;
 
+  // --- NEW: per-item evidence (no logic change) ---
+  final List<bool> itemCorrect = [];
+  final List<int> itemTimesMs = [];
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +71,11 @@ class _WordLadderGameState extends State<WordLadderGame> {
   void _handleTimeout() {
     _questionTimer?.cancel();
     HapticFeedback.vibrate();
+
+    // Evidence: no response by deadline => incorrect, time = limit (not fabricated)
+    itemCorrect.add(false);
+    itemTimesMs.add(timePerQuestion * 1000);
+
     _showFeedback(false, isTimeout: true);
   }
 
@@ -81,15 +90,19 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
     final item = items[index];
     final rt = DateTime.now().millisecondsSinceEpoch - startMs;
-    reactionTimes.add(rt);
 
-    bool isCorrect = (selectedIdx == item.correctIndex);
+    final bool isCorrect = (selectedIdx == item.correctIndex);
+
+    // Evidence logging
+    itemCorrect.add(isCorrect);
+    itemTimesMs.add(rt.clamp(0, timePerQuestion * 1000));
+
     if (isCorrect) correctCount++;
 
     if (isCorrect) {
-       HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
     } else {
-       HapticFeedback.heavyImpact();
+      HapticFeedback.heavyImpact();
     }
 
     _showFeedback(isCorrect);
@@ -116,61 +129,79 @@ class _WordLadderGameState extends State<WordLadderGame> {
   }
 
   Map<String, double> grade() {
-    final int n = items.length;
-    if (n == 0) {
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
+    final int n = [
+      items.length,
+      itemCorrect.length,
+      itemTimesMs.length,
+    ].reduce((a, b) => a < b ? a : b);
+
+    if (n <= 0) {
       return {
-        "Abstract Thinking": 0.0,
         "Inductive Reasoning": 0.0,
+        "Abstract Thinking": 0.0,
         "Information Processing Speed": 0.0,
-        "Decision Under Pressure": 0.0,
-        "Verbal Fluency": 0.0,
       };
     }
 
-    // Accuracy: % correct
-    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
+    // ---- Intermediate metrics ----
+    int correctTotal = 0;
 
-    // Avg RT only on answered questions (timeouts aren't included in reactionTimes)
-    // We must account for timeouts implicitly: low accuracy will gate speed anyway.
-    final double avgRt = reactionTimes.isEmpty
-        ? (timePerQuestion * 1000).toDouble()
-        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+    int inductiveN = 0, inductiveCorrect = 0;
+    int abstractN = 0, abstractCorrect = 0;
 
-    // Raw speed: 1500ms = excellent, 15000ms = very slow
-    // (These are hard, so "fast" isn't 400ms like reflex games.)
-    final double rawSpeed =
-    (1.0 - ((avgRt - 1500.0) / 13500.0)).clamp(0.0, 1.0);
+    for (int i = 0; i < n; i++) {
+      final item = items[i];
+      final bool correct = itemCorrect[i];
+      if (correct) correctTotal++;
 
-    // Earned speed: speed only counts if you are accurate
-    final double earnedSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+      final String cat = item.category;
 
-    // Pressure handling: emphasize maintaining performance under timer.
-    // If accuracy is high AND they are not slow, they handled pressure.
-    final double pressure =
-    (0.7 * accuracy + 0.3 * rawSpeed).clamp(0.0, 1.0);
+      final bool isAbstractBucket =
+          cat.contains("SYSTEMS") || cat.contains("EMERGENCE");
 
-    // Inductive reasoning: this game is “infer the rule from examples”.
-    // We use accuracy, but slightly reward solving faster (less trial-and-error).
-    final double inductive =
-    (0.8 * accuracy + 0.2 * earnedSpeed).clamp(0.0, 1.0);
+      if (isAbstractBucket) {
+        abstractN++;
+        if (correct) abstractCorrect++;
+      } else {
+        inductiveN++;
+        if (correct) inductiveCorrect++;
+      }
+    }
 
-    // Abstract thinking: same core signal, but weighted-accuracy-like feel.
-    // These items are all abstract; we can treat accuracy as the main proxy.
-    final double abstractThinking = accuracy;
+    final double overallAccuracy = clamp01(correctTotal / n);
 
-    // Verbal fluency (semantic access speed): speed matters more than accuracy,
-    // but still gated by accuracy to avoid fast-guessing.
-    final double verbalFluency =
-    (0.6 * earnedSpeed + 0.4 * accuracy).clamp(0.0, 1.0);
+    final double inductiveAccuracy =
+    inductiveN == 0 ? 0.0 : clamp01(inductiveCorrect / inductiveN);
 
+    final double abstractAccuracy =
+    abstractN == 0 ? 0.0 : clamp01(abstractCorrect / abstractN);
+
+    // ---- Information Processing Speed (earned; gated by correctness) ----
+    double informationProcessingSpeed = 0.0;
+    {
+      final times = itemTimesMs.take(n).toList()..sort();
+      final int mid = times.length ~/ 2;
+      final double medianMs = times.length.isOdd
+          ? times[mid].toDouble()
+          : ((times[mid - 1] + times[mid]) / 2.0);
+
+      // Normalize by the actual question time limit (no magic constants)
+      final double rawSpeed = clamp01(1.0 - (medianMs / (timePerQuestion * 1000)));
+
+      // Earned speed: no fast-guessing points
+      informationProcessingSpeed = clamp01(rawSpeed * overallAccuracy);
+    }
+
+    // ---- Skills (no overlap / no forced skills) ----
     return {
-      "Abstract Thinking": abstractThinking,
-      "Inductive Reasoning": inductive,
-      "Information Processing Speed": earnedSpeed,
-      "Decision Under Pressure": pressure,
-      "Verbal Fluency": verbalFluency,
+      "Inductive Reasoning": inductiveAccuracy,
+      "Abstract Thinking": abstractAccuracy,
+      "Information Processing Speed": informationProcessingSpeed,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

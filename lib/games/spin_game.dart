@@ -25,6 +25,10 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   Color? feedbackColor;
   String? feedbackText;
 
+  final List<bool> _trialCorrect = [];
+  final List<int> _trialRtMs = [];
+  final List<int> _trialLimitMs = [];
+
   static const int _roundLimitMs = 20000; // 20s timeout penalty for speed scoring
 
   @override
@@ -67,8 +71,12 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     _roundTimer?.cancel();
     HapticFeedback.vibrate();
 
-    // Anti-cheat: if you don't answer, you get a max-time reaction time.
+    // Record explicit failure + max-time RT (no free points)
     reactionTimes.add(_roundLimitMs);
+
+    _trialCorrect.add(false);
+    _trialRtMs.add(_roundLimitMs);
+    _trialLimitMs.add(_roundLimitMs);
 
     _showFeedback(false, isTimeout: true);
   }
@@ -88,6 +96,10 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     reactionTimes.add(rt);
 
     bool isCorrect = (optionIndex == level.correctIndex);
+    _trialCorrect.add(isCorrect);
+    _trialRtMs.add(rt);
+    _trialLimitMs.add(_roundLimitMs);
+
     if (isCorrect) correctCount++;
     
     if (isCorrect) {
@@ -120,46 +132,71 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   }
 
   Map<String, double> grade() {
-    final int n = levels.length;
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
+    // Use only trials we actually have evidence for
+    final int n = [
+      levels.length,
+      _trialCorrect.length,
+      _trialRtMs.length,
+      _trialLimitMs.length,
+    ].reduce((a, b) => a < b ? a : b);
+
     if (n == 0) {
       return {
         "Mental Rotation": 0.0,
-        "Spatial Awareness": 0.0,
         "Pattern Recognition": 0.0,
         "Information Processing Speed": 0.0,
-        "Decision Under Pressure": 0.0,
       };
     }
 
-    // Accuracy (timeouts automatically count as wrong because correctCount doesn't increase)
-    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
+    // -------------------------
+    // 1) Accuracy (smoothed)
+    // -------------------------
+    int correct = 0;
+    for (int i = 0; i < n; i++) {
+      if (_trialCorrect[i]) correct++;
+    }
 
-    // Avg RT (includes timeout penalty if user didn't answer)
-    final double avgRt = reactionTimes.isEmpty
-        ? _roundLimitMs.toDouble()
-        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+    // Beta(1,1) posterior mean: avoids 0.0/1.0 extremes on n=3
+    final double smoothedAccuracy = (correct + 1) / (n + 2);
 
-    // Raw speed: 2.5s = fast (1.0), 14s = slow (0.0)
-    final double rawSpeed = (1.0 - ((avgRt - 2500.0) / 11500.0)).clamp(0.0, 1.0);
+    // -------------------------
+    // 2) Speed (normalized, median)
+    // -------------------------
+    // rawSpeed_i = 1 - rt/limit  (timeouts => 0)
+    final List<double> rawSpeeds = [];
+    for (int i = 0; i < n; i++) {
+      final int limit = _trialLimitMs[i];
+      final int rt = _trialRtMs[i].clamp(0, limit);
+      rawSpeeds.add(clamp01(1.0 - (rt / limit)));
+    }
 
-    // Earned speed: you only "get speed credit" if you're correct (anti-guess)
-    final double earnedSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+    rawSpeeds.sort();
+    final int mid = rawSpeeds.length ~/ 2;
+    final double medianRawSpeed = rawSpeeds.length.isOdd
+        ? rawSpeeds[mid]
+        : (rawSpeeds[mid - 1] + rawSpeeds[mid]) / 2.0;
 
-    final double mentalRotation = (0.80 * accuracy + 0.20 * earnedSpeed).clamp(0.0, 1.0);
-    final double spatialAwareness = (0.70 * accuracy + 0.30 * earnedSpeed).clamp(0.0, 1.0);
-    final double patternRecognition = accuracy;
+    // Earned speed: fast only counts if correct (anti-guess)
+    final double earnedSpeed = clamp01(medianRawSpeed * smoothedAccuracy);
 
-    // Under pressure: mostly accuracy, small benefit from being quick
-    final double decisionUnderPressure = (0.80 * accuracy + 0.20 * rawSpeed).clamp(0.0, 1.0);
+    // -------------------------
+    // 3) Skill mapping (no double-forcing)
+    // -------------------------
+    // Pattern Recognition: structural identification (accuracy-dominant)
+    final double patternRecognition = clamp01(smoothedAccuracy);
+
+    // Mental Rotation: matching under rotation; add a small earned-speed component
+    final double mentalRotation = clamp01(0.75 * smoothedAccuracy + 0.25 * earnedSpeed);
 
     return {
       "Mental Rotation": mentalRotation,
-      "Spatial Awareness": spatialAwareness,
       "Pattern Recognition": patternRecognition,
       "Information Processing Speed": earnedSpeed,
-      "Decision Under Pressure": decisionUnderPressure,
     };
   }
+
 
 
   @override

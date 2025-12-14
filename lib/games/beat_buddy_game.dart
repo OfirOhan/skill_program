@@ -43,6 +43,13 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   final AudioPlayer _perfectPlayer = AudioPlayer();
   final AudioPlayer _badPlayer = AudioPlayer();
 
+  double _levelStartTimeMs = 0;
+
+  int missHits = 0;
+  int badHits = 0;      // (110–250ms window)
+  int totalTaps = 0;
+
+
   @override
   void initState() {
     super.initState();
@@ -87,6 +94,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
       else bpm = 120;
 
       beatIntervalMs = 60000 / bpm;
+      _levelStartTimeMs = _currentTime; // re-zero beat phase for this level
       feedbackText = "";
       showFeedback = false;
     });
@@ -122,13 +130,18 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   void _onTap() async {
     if (isGameOver) return;
 
-    double phase = _currentTime % beatIntervalMs;
+    totalTaps++;
+
+    double phase = (_currentTime - _levelStartTimeMs) % beatIntervalMs;
     double devFromStart = phase;
     double devFromEnd = beatIntervalMs - phase;
     double actualDeviation = min(devFromStart, devFromEnd);
 
+    // Miss (outside window)
     if (actualDeviation > 250) {
-      HapticFeedback.heavyImpact(); // Miss
+      missHits++;
+      deviations.add(250); // penalize precision too
+      HapticFeedback.heavyImpact();
       _triggerFeedback("MISS", Colors.grey);
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
@@ -136,7 +149,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
     }
 
     deviations.add(actualDeviation.toInt());
-    bool isLate = devFromStart < devFromEnd;
+    bool isLate = devFromStart < devFromEnd; // closer to beat-start => slightly after beat => "late"
 
     if (actualDeviation < 45) {
       perfectHits++;
@@ -144,21 +157,21 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
       await _perfectPlayer.stop();
       await _perfectPlayer.play(AssetSource('sounds/perfect.mp3'));
       HapticFeedback.heavyImpact();
-
     } else if (actualDeviation < 110) {
       goodHits++;
       _triggerFeedback(isLate ? "LATE" : "EARLY", Colors.orange);
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       HapticFeedback.mediumImpact();
-
     } else {
+      badHits++;
       _triggerFeedback("BAD", Colors.red);
       await _badPlayer.stop();
       await _badPlayer.play(AssetSource('sounds/bad.mp3'));
       HapticFeedback.vibrate();
     }
   }
+
 
   void _triggerFeedback(String text, Color color) {
     setState(() {
@@ -173,21 +186,49 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with SingleTickerProvider
   }
 
   Map<String, double> grade() {
-    double avgDev = deviations.isEmpty ? 200.0 : deviations.reduce((a,b)=>a+b) / deviations.length;
-    double rhythmScore = (1.0 - (avgDev / 150.0)).clamp(0.0, 1.0);
+    final int attempts = max(1, totalTaps);
 
-    if (totalBeatsEncountered == 0) totalBeatsEncountered = 1;
-    double hitRatio = (perfectHits + goodHits) / totalBeatsEncountered.toDouble();
+    // Hit quality (don’t let spam tapping score well)
+    final double hitRate = ((perfectHits + goodHits + badHits) / attempts).clamp(0.0, 1.0);
+
+    // Timing precision (includes misses because we push 250ms into deviations on miss)
+    final double avgDev = deviations.isEmpty
+        ? 250.0
+        : deviations.reduce((a, b) => a + b) / deviations.length;
+
+    // 0ms perfect, 250ms worst (window edge)
+    final double precision = (1.0 - (avgDev / 250.0)).clamp(0.0, 1.0);
+
+    // Consistency (std dev) — conservative
+    double stdDev = 250.0;
+    if (deviations.length >= 2) {
+      final double mean = avgDev;
+      double varSum = 0.0;
+      for (final d in deviations) {
+        final diff = d - mean;
+        varSum += diff * diff;
+      }
+      stdDev = sqrt(varSum / deviations.length);
+    }
+    final double consistency = (1.0 - (stdDev / 140.0)).clamp(0.0, 1.0);
+
+    // --- Canonical skills ---
+    // Auditory Rhythm: timing precision + consistency, gated by not missing constantly
+    final double auditoryRhythm = (0.55 * precision + 0.25 * consistency + 0.20 * hitRate).clamp(0.0, 1.0);
+
+    // Visuomotor Integration: converting the beat cue into a timed motor action
+    final double visuomotor = (0.65 * hitRate + 0.35 * precision).clamp(0.0, 1.0);
+
+    // Information Processing Speed: only “earned” if timing is accurate (anti-guess)
+    final double infoSpeed = (precision * hitRate).clamp(0.0, 1.0);
 
     return {
-      "Rhythm Coordination": rhythmScore,
-      "Musical Perception": (rhythmScore * 0.7 + hitRatio * 0.3).clamp(0.0, 1.0),
-      "Motor Coordination": hitRatio.clamp(0.0, 1.0),
-      "Reaction Time": rhythmScore,
-      "Consistency & Reliability": hitRatio,
-      "Emotional Regulation": 0.5,
+      "Auditory Rhythm": auditoryRhythm,
+      "Visuomotor Integration": visuomotor,
+      "Information Processing Speed": infoSpeed,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

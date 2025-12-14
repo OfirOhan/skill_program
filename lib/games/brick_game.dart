@@ -6,6 +6,11 @@ import 'package:flutter/services.dart';
 
 // --- DATA & CONFIG (Preserved) ---
 
+// --- NEW: timing evidence (tracking only) ---
+int divergentUsedMs = 0;           // how long they actually brainstormed
+int convergentStartMs = 0;         // when decision phase begins
+int convergentDecisionMs = -1;     // time-to-pick within decision phase; -1 = no decision
+
 final Set<String> _englishWords = {
   "door", "doorstop", "weapon", "build", "pedestal", "paint", "powder",
   "crush", "pigment", "throw", "window", "art", "sculpture", "support",
@@ -133,9 +138,16 @@ class _BrickGameState extends State<BrickGame> {
   }
 
   void _switchToConvergent() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // If user ends early, use actual time spent (not the full 45s)
+    divergentUsedMs = now - startTime;
+
     setState(() {
       isDivergentPhase = false;
       currentSeconds = convergentDuration;
+      convergentStartMs = now;
+      convergentDecisionMs = -1;
     });
   }
 
@@ -163,11 +175,20 @@ class _BrickGameState extends State<BrickGame> {
   void _selectConvergent(int index) {
     if (selectedOptionIndex != -1) return;
     if (index < 0 || index >= ideas.length) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+
     HapticFeedback.selectionClick();
     setState(() {
       selectedOptionIndex = index;
       convergentChosen = true;
+
+      // Evidence: time-to-commit during the short decision window
+      if (convergentStartMs > 0) {
+        convergentDecisionMs = (now - convergentStartMs).clamp(0, convergentDuration * 1000);
+      }
     });
+
     Future.delayed(const Duration(milliseconds: 500), _finishGame);
   }
 
@@ -184,7 +205,8 @@ class _BrickGameState extends State<BrickGame> {
   }
 
   Map<String, double> calculateScores() {
-    // Helper: count only "valid" ideas (contain at least one known real word)
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
     bool isValidIdea(String s) => _containsRealWord(s);
 
     if (ideas.isEmpty) {
@@ -194,99 +216,132 @@ class _BrickGameState extends State<BrickGame> {
         "Cognitive Flexibility": 0.0,
         "Planning & Prioritization": 0.0,
         "Decision Under Pressure": 0.0,
-        "Verbal Fluency": 0.0,
       };
     }
 
-    final int totalIdeas = ideas.length;
     final List<String> validIdeas = ideas.where(isValidIdea).toList();
     final int validCount = validIdeas.length;
 
-    // -----------------------------
-    // 1) Ideation Fluency (quantity)
-    // -----------------------------
-    // "usable ideas per 45s" – only count valid ones
-    const double idealValidCount = 9.0; // calibrated for 45s
-    final double ideationFluency = (validCount / idealValidCount).clamp(0.0, 1.0);
-
-    // -------------------------------------------------
-    // 2) Divergent Thinking (originality across ideas)
-    // -------------------------------------------------
-    // Uses your frequency-based originality heuristic, averaged over valid ideas only.
-    double sumOrig = 0.0;
-    for (final idea in validIdeas) {
-      sumOrig += _originalityForIdea(idea, keywordFrequency);
+    // No valid ideas => no defensible creativity evidence
+    if (validCount == 0) {
+      return {
+        "Ideation Fluency": 0.0,
+        "Divergent Thinking": 0.0,
+        "Cognitive Flexibility": 0.0,
+        "Planning & Prioritization": 0.0,
+        "Decision Under Pressure": 0.0,
+      };
     }
-    final double divergentThinking = (validCount == 0 ? 0.0 : (sumOrig / validCount)).clamp(0.0, 1.0);
 
-    // -------------------------------------------------
-    // 3) Cognitive Flexibility (category diversity)
-    // -------------------------------------------------
-    // Count distinct categories among valid ideas.
-    final Set<String> categories = {};
-    for (final idea in validIdeas) {
-      final cat = _detectCategory(idea);
-      if (cat != null) categories.add(cat);
-    }
-    // With your current category map, 4+ distinct categories is already strong
-    final double cognitiveFlexibility = (categories.length / 4.0).clamp(0.0, 1.0);
+    // -----------------------------------
+    // 1) Ideation Fluency (valid idea rate)
+    // -----------------------------------
+    // Normalize to "1 valid idea per ~5 seconds" as a reasonable target,
+    // derived from the actual time used (no fixed magic 9 count).
+    final int usedMs = (divergentUsedMs > 0)
+        ? divergentUsedMs.clamp(1, divergentDuration * 1000)
+        : (divergentDuration * 1000);
 
-    // -------------------------------------------------
-    // 4) Planning & Prioritization (best-pick quality)
-    // -------------------------------------------------
-    // Only measurable if user actually picked one.
-    // We score the selected idea by: originality + elaboration + (practicality bonus)
-    double planningPrioritization = 0.0;
-    if (convergentChosen && selectedOptionIndex >= 0 && selectedOptionIndex < ideas.length) {
-      final sel = ideas[selectedOptionIndex];
-      final selValid = isValidIdea(sel);
+    final double usedSeconds = usedMs / 1000.0;
+    final double targetIdeas = usedSeconds / 5.0; // 1 idea / 5s target
+    final double ideationFluency = clamp01(validCount / (targetIdeas <= 0 ? 1.0 : targetIdeas));
 
-      if (selValid) {
-        final selOrig = _originalityForIdea(sel, keywordFrequency);
-        final selElab = _elaborationScore(sel);
-        final selCat = _detectCategory(sel);
-
-        // Practical selection bonus: indicates prioritizing utility (not required, just mild)
-        final double practicalBonus = (selCat != null && selCat != 'danger') ? 1.0 : 0.0;
-
-        planningPrioritization = (selOrig * 0.55 + selElab * 0.35 + practicalBonus * 0.10).clamp(0.0, 1.0);
-      } else {
-        planningPrioritization = 0.0;
+    // -------------------------------------------
+    // 2) Divergent Thinking (originality of ideas)
+    // -------------------------------------------
+    // Only defensible if there are multiple valid ideas (stability).
+    double divergentThinking = 0.0;
+    if (validCount >= 2) {
+      double sumOrig = 0.0;
+      for (final idea in validIdeas) {
+        sumOrig += _originalityForIdea(idea, keywordFrequency);
       }
+      divergentThinking = clamp01(sumOrig / validCount);
+    } else {
+      divergentThinking = 0.0;
+    }
+
+    // ---------------------------------------------------
+    // 3) Cognitive Flexibility (semantic category diversity)
+    // ---------------------------------------------------
+    // Use normalized Shannon entropy across detected categories (0..1).
+    // Requires enough categorized evidence.
+    double cognitiveFlexibility = 0.0;
+    {
+      final Map<String, int> catFreq = {};
+      int categorized = 0;
+
+      for (final idea in validIdeas) {
+        final cat = _detectCategory(idea);
+        if (cat != null) {
+          categorized++;
+          catFreq[cat] = (catFreq[cat] ?? 0) + 1;
+        }
+      }
+
+      final int K = _keywordToCategory.values.toSet().length; // max possible categories in your map
+
+      if (categorized >= 2 && catFreq.length >= 2 && K >= 2) {
+        double h = 0.0;
+        catFreq.forEach((_, c) {
+          final double p = c / categorized;
+          h += -p * log(p);
+        });
+        final double hMax = log(K.toDouble());
+        cognitiveFlexibility = clamp01(hMax <= 0 ? 0.0 : (h / hMax));
+      } else {
+        cognitiveFlexibility = 0.0;
+      }
+    }
+
+    // ----------------------------------------------------
+    // 4) Planning & Prioritization (picked best-of-own-ideas)
+    // ----------------------------------------------------
+    // Evidence only if they actually chose an option.
+    // Score = selectedQuality / bestQuality among their valid ideas.
+    double planningPrioritization = 0.0;
+    double selectedQualityRatio = 0.0;
+
+    double qualityOf(String idea) {
+      // objective: originality + elaboration (both derived from typed content)
+      final double o = _originalityForIdea(idea, keywordFrequency);
+      final double e = _elaborationScore(idea);
+      return clamp01(0.65 * o + 0.35 * e);
+    }
+
+    if (convergentChosen &&
+        selectedOptionIndex >= 0 &&
+        selectedOptionIndex < ideas.length &&
+        isValidIdea(ideas[selectedOptionIndex])) {
+      final String selected = ideas[selectedOptionIndex];
+
+      double best = 0.0;
+      for (final v in validIdeas) {
+        final q = qualityOf(v);
+        if (q > best) best = q;
+      }
+
+      final double selQ = qualityOf(selected);
+
+      selectedQualityRatio = (best <= 0.0) ? 0.0 : clamp01(selQ / best);
+      planningPrioritization = selectedQualityRatio;
     } else {
       planningPrioritization = 0.0;
+      selectedQualityRatio = 0.0;
     }
 
-    // -------------------------------------------------
-    // 5) Decision Under Pressure (did they decide + not too late)
-    // -------------------------------------------------
-    // Minimal honest signal: made a choice at all.
-    // Optional timing signal: the convergent phase is short; we can reward having enough ideas early.
-    // We approximate "pressure handling" by how many valid ideas were generated in the first 10s.
-    final int earlyValid = ideaTimestamps
-        .asMap()
-        .entries
-        .where((e) => e.value <= 10000 && isValidIdea(ideas[e.key]))
-        .length;
-
-    final double decisionUnderPressure = (
-        (convergentChosen ? 0.7 : 0.0) +
-            (min(earlyValid / 3.0, 1.0) * 0.3)
-    ).clamp(0.0, 1.0);
-
-    // -------------------------------------------------
-    // 6) Verbal Fluency (usable word output rate)
-    // -------------------------------------------------
-    // Measures ability to express ideas quickly in language.
-    // Use valid ideas rate + slight elaboration.
-    double sumElab = 0.0;
-    for (final idea in validIdeas) sumElab += _elaborationScore(idea);
-    final double avgElab = validCount == 0 ? 0.0 : (sumElab / validCount);
-
-    final double verbalFluency = (
-        0.75 * ideationFluency +
-            0.25 * avgElab
-    ).clamp(0.0, 1.0);
+    // ------------------------------------------
+    // 5) Decision Under Pressure (commit quickly)
+    // ------------------------------------------
+    // Direct evidence: made a decision in the short convergent window,
+    // and did so quickly, AND the choice was good (quality ratio).
+    double decisionUnderPressure = 0.0;
+    if (convergentChosen && convergentDecisionMs >= 0) {
+      final double timeScore = clamp01(1.0 - (convergentDecisionMs / (convergentDuration * 1000.0)));
+      decisionUnderPressure = clamp01(timeScore * selectedQualityRatio);
+    } else {
+      decisionUnderPressure = 0.0;
+    }
 
     return {
       "Ideation Fluency": ideationFluency,
@@ -294,9 +349,9 @@ class _BrickGameState extends State<BrickGame> {
       "Cognitive Flexibility": cognitiveFlexibility,
       "Planning & Prioritization": planningPrioritization,
       "Decision Under Pressure": decisionUnderPressure,
-      "Verbal Fluency": verbalFluency,
     };
   }
+
 
 
   @override

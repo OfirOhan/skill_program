@@ -39,6 +39,10 @@ class _PrecisionGameState extends State<PrecisionGame> {
   double avgDeviation = 0.0;
   int levelsCompleted = 0;
 
+  double _sumOffRate = 0.0;   // off-path samples / total samples (per level)
+  double _sumDevNorm = 0.0;   // avg deviation normalized by (pathWidth/2) (per level)
+  int _metricLevels = 0;      // how many levels contributed evidence
+
   @override
   void initState() {
     super.initState();
@@ -104,11 +108,24 @@ class _PrecisionGameState extends State<PrecisionGame> {
   }
 
   void _nextLevel() {
-    totalTouches += touchCount;
-    if (sampleCount > 0) {
-      avgDeviation += (totalDeviation / sampleCount);
+    // --- record evidence for this level (anti-cheat included) ---
+    if (sampleCount >= 10) {
+      final offRate = (touchCount / sampleCount).clamp(0.0, 1.0);
+
+      final avgDevPx = totalDeviation / sampleCount;
+      final devNorm = (avgDevPx / max(1.0, (pathWidth / 2))).clamp(0.0, 1.0);
+
+      _sumOffRate += offRate;
+      _sumDevNorm += devNorm;
+      _metricLevels++;
+    } else {
+      // If they barely touched / did nothing, treat as worst evidence (prevents “no input” exploits)
+      _sumOffRate += 1.0;
+      _sumDevNorm += 1.0;
+      _metricLevels++;
     }
 
+    // Reset per-level counters
     touchCount = 0;
     totalDeviation = 0;
     sampleCount = 0;
@@ -116,6 +133,7 @@ class _PrecisionGameState extends State<PrecisionGame> {
     level++;
     _startLevel();
   }
+
 
   void _onPanStart(DragStartDetails details) {
     _handleInput(details.globalPosition);
@@ -211,26 +229,40 @@ class _PrecisionGameState extends State<PrecisionGame> {
     return points;
   }
 
-  // --- SCORING ---
   Map<String, double> grade() {
-    double motorControl = (1.0 - (totalTouches / 100.0)).clamp(0.0, 1.0);
-    double deviationScore = 0.0;
-    if (levelsCompleted > 0) {
-      double finalAvgDev = avgDeviation / levelsCompleted;
-      deviationScore = (1.0 - (finalAvgDev / 30.0)).clamp(0.0, 1.0);
+    if (_metricLevels == 0) {
+      return {
+        "Fine Motor Control": 0.0,
+        "Visuomotor Integration": 0.0,
+        "Movement Steadiness": 0.0,
+      };
     }
-    double completion = levelsCompleted / 3.0;
+
+    final completion = (levelsCompleted / 3.0).clamp(0.0, 1.0);
+
+    final meanOffRate = (_sumOffRate / _metricLevels).clamp(0.0, 1.0);
+    final meanDevNorm = (_sumDevNorm / _metricLevels).clamp(0.0, 1.0);
+
+    // Tracking quality: balance “went out of bounds” + “how far from center”
+    final trackingQuality =
+    (1.0 - (0.55 * meanDevNorm + 0.45 * meanOffRate)).clamp(0.0, 1.0);
+
+    // Steadiness: more deviation-heavy (wobble)
+    final steadiness =
+    (1.0 - (0.75 * meanDevNorm + 0.25 * meanOffRate)).clamp(0.0, 1.0);
+
+    // Canonical skills
+    final fineMotorControl = trackingQuality;
+    final visuomotorIntegration = (trackingQuality * completion).clamp(0.0, 1.0);
+    final movementSteadiness = steadiness;
 
     return {
-      "Fine Motor Control": motorControl,
-      "Precision Handling": deviationScore,
-      "Hand-Eye Coordination": (motorControl * 0.5 + deviationScore * 0.5).clamp(0.0, 1.0),
-      "Spatial Awareness": completion,
-      "Gross Motor Control": motorControl * 0.8,
-      "Balance & Stability": deviationScore * 0.9,
-      "Attention to Detail": (1.0 - (totalTouches > 0 ? 0.2 : 0.0)).clamp(0.0, 1.0),
+      "Fine Motor Control": fineMotorControl,
+      "Visuomotor Integration": visuomotorIntegration,
+      "Movement Steadiness": movementSteadiness,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

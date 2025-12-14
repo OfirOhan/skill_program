@@ -25,6 +25,12 @@ class _ChartDashGameState extends State<ChartDashGame> {
   Color? feedbackColor;
   String? feedbackText;
 
+  final List<bool> _qCorrect = [];
+  final List<int> _qRtMs = [];
+  final List<int> _qLimitMs = [];
+
+  int _currentLimitMs = 15000;
+
   @override
   void initState() {
     super.initState();
@@ -48,7 +54,7 @@ class _ChartDashGameState extends State<ChartDashGame> {
     int timeLimit = 15;
     if (index == 1) timeLimit = 25; // Moderate (Math involved)
     if (index == 2) timeLimit = 35; // Hard (Complex Logic)
-
+    _currentLimitMs = timeLimit * 1000;
     setState(() {
       remainingSeconds = timeLimit;
       startMs = DateTime.now().millisecondsSinceEpoch;
@@ -67,9 +73,16 @@ class _ChartDashGameState extends State<ChartDashGame> {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
-    HapticFeedback.vibrate(); // Timeout feedback
+    HapticFeedback.vibrate();
+
+    // Record explicit failure + full time cost (no free points)
+    _qCorrect.add(false);
+    _qRtMs.add(_currentLimitMs);
+    _qLimitMs.add(_currentLimitMs);
+
     _showFeedback(false, isTimeout: true);
   }
+
 
   void _finishGame() {
     _roundTimer?.cancel();
@@ -86,6 +99,10 @@ class _ChartDashGameState extends State<ChartDashGame> {
     reactionTimes.add(rt);
 
     bool isCorrect = (optionIndex == q.correctIndex);
+    _qCorrect.add(isCorrect);
+    _qRtMs.add(rt);
+    _qLimitMs.add(_currentLimitMs);
+
     if (isCorrect) correctCount++;
 
     if (isCorrect) {
@@ -118,52 +135,79 @@ class _ChartDashGameState extends State<ChartDashGame> {
   }
 
   Map<String, double> grade() {
-    final int n = questions.length;
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
+    int n = [
+      questions.length,
+      _qCorrect.length,
+      _qRtMs.length,
+      _qLimitMs.length,
+    ].reduce((a, b) => a < b ? a : b);
+
     if (n == 0) {
       return {
         "Quantitative Reasoning": 0.0,
-        "Inductive Reasoning": 0.0,
-        "Visual Acuity": 0.0,
         "Information Processing Speed": 0.0,
-        "Decision Under Pressure": 0.0,
       };
     }
 
-    // Accuracy
-    final double accuracy = (correctCount / n).clamp(0.0, 1.0);
+    // -------------------------
+    // 1) Core accuracy metrics
+    // -------------------------
+    int correct = 0;
+    for (int i = 0; i < n; i++) {
+      if (_qCorrect[i]) correct++;
+    }
+    final double overallAccuracy = clamp01(correct / n);
 
-    // Average reaction time (answered questions only)
-    final double avgRt = reactionTimes.isEmpty
-        ? 15000.0
-        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+    // -----------------------------------------
+    // 2) Speed (normalized by each time limit)
+    // -----------------------------------------
+    // rawSpeed_i = 1 - rt/limit  (timeouts are rt=limit => 0)
+    final List<double> speeds = [];
+    for (int i = 0; i < n; i++) {
+      final int limit = _qLimitMs[i];
+      final int rt = _qRtMs[i].clamp(0, limit);
+      speeds.add(clamp01(1.0 - (rt / limit)));
+    }
 
-    // Raw speed: these are harder than reflex games, so:
-    // 4000ms = fast, 20000ms = slow
-    final double rawSpeed = (1.0 - ((avgRt - 4000.0) / 16000.0)).clamp(0.0, 1.0);
+    speeds.sort();
+    final int mid = speeds.length ~/ 2;
+    final double medianRawSpeed = speeds.length.isOdd
+        ? speeds[mid]
+        : (speeds[mid - 1] + speeds[mid]) / 2.0;
 
-    // Earned speed: speed only matters if correct (anti-guess)
-    final double infoSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+    // Earned speed: speed only counts if accuracy is there
+    final double informationProcessingSpeed = clamp01(medianRawSpeed * overallAccuracy);
 
-    // Decision under pressure: mostly accuracy, small speed component
-    final double pressure = (0.8 * accuracy + 0.2 * rawSpeed).clamp(0.0, 1.0);
+    // -----------------------------------------
+    // 3) Quantitative Reasoning (math-only items)
+    // -----------------------------------------
+    // In your generator, Q2 (index 1) and Q3 (index 2) require arithmetic.
+    int mathTrials = 0;
+    int mathCorrect = 0;
+    for (int i = 0; i < n; i++) {
+      if (i == 1 || i == 2) {
+        mathTrials++;
+        if (_qCorrect[i]) mathCorrect++;
+      }
+    }
 
-    // Skill mapping (conservative because only 3 items)
-    final double quantitative = (0.85 * accuracy + 0.15 * infoSpeed).clamp(0.0, 1.0);
+    final double mathAccuracy = mathTrials == 0 ? 0.0 : clamp01(mathCorrect / mathTrials);
 
-    // Inductive reasoning here is "interpreting what to compute" from the question+chart
-    final double inductive = (0.75 * accuracy + 0.25 * infoSpeed).clamp(0.0, 1.0);
+    // Evidence gate: only 2 math trials exist in this game design.
+    // If for any reason we have fewer, don’t overclaim.
+    final double mathEvidence = clamp01(mathTrials / 2.0);
 
-    // Visual acuity = reading values/labels correctly; accuracy is the best proxy available
-    final double visualAcuity = accuracy;
+    // Also gate by overallAccuracy to reduce “lucky” spikes on tiny n
+    final double quantitativeReasoning = clamp01(mathAccuracy * mathEvidence * overallAccuracy);
 
     return {
-      "Quantitative Reasoning": quantitative,
-      "Inductive Reasoning": inductive,
-      "Visual Acuity": visualAcuity,
-      "Information Processing Speed": infoSpeed,
-      "Decision Under Pressure": pressure,
+      "Quantitative Reasoning": quantitativeReasoning,
+      "Information Processing Speed": informationProcessingSpeed,
     };
   }
+
 
 
   @override

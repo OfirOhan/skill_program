@@ -181,68 +181,127 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
   }
 
   Map<String, double> grade() {
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
     final int totalTrials = seq.length;
-    if (totalTrials < widget.nBack) {
+    if (totalTrials < widget.nBack + 1) {
       return {
         "Working Memory": 0.0,
-        "Associative Memory": 0.0,
         "Response Inhibition": 0.0,
-        "Information Processing Speed": 0.0,
+        "Reaction Time (Choice)": 0.0,
         "Observation / Vigilance": 0.0,
       };
     }
 
-    int totalTargets = hits + misses;                 // match trials
-    int totalDistractors = totalTrials - totalTargets; // non-match trials
+    // ---- Recompute outcomes from direct behavioral evidence ----
+    int targets = 0, distractors = 0;
+    int nHits = 0, nMisses = 0, nFalseAlarms = 0, nCorrectRejections = 0;
 
-    // Avoid divide-by-zero (no imputation: if a class truly doesn't exist, score becomes 0)
-    if (totalTargets <= 0) totalTargets = 0;
-    if (totalDistractors <= 0) totalDistractors = 0;
+    for (int i = 0; i < totalTrials; i++) {
+      final bool isTarget = _isMatch(i);
+      final bool claimed = seq[i].userClaimed;
 
-    // --- Accuracy components ---
-    // Precision: when you claim match, how often correct?
-    final double precision = (hits + falseAlarms) == 0 ? 0.0 : (hits / (hits + falseAlarms));
-
-    // Recall/Sensitivity: out of true matches, how many caught?
-    final double recall = totalTargets == 0 ? 0.0 : (hits / totalTargets);
-
-    // Specificity/Inhibition: out of non-matches, how many correctly ignored?
-    final double inhibition = totalDistractors == 0 ? 0.0 : ((totalDistractors - falseAlarms) / totalDistractors);
-
-    // Working memory: balanced “hit targets without hallucinating”
-    final double f1 = (precision + recall) == 0 ? 0.0 : (2 * precision * recall) / (precision + recall);
-
-    // Associative binding (pos+color): balanced accuracy handles class imbalance
-    final double assoc = ((recall + inhibition) / 2).clamp(0.0, 1.0);
-
-    // --- Vigilance / stability over time (only if both halves have evidence) ---
-    final double firstHalfAcc = firstHalfTrials == 0 ? 0.0 : (firstHalfHits / firstHalfTrials);
-    final double secondHalfAcc = secondHalfTrials == 0 ? 0.0 : (secondHalfHits / secondHalfTrials);
-
-    double vigilance = 0.0;
-    if (firstHalfTrials > 0 && secondHalfTrials > 0) {
-      vigilance = (1.0 - (firstHalfAcc - secondHalfAcc).abs()).clamp(0.0, 1.0);
-    } else {
-      vigilance = 0.0; // no evidence to claim stability
+      if (isTarget) {
+        targets++;
+        if (claimed) {
+          nHits++;
+        } else {
+          nMisses++;
+        }
+      } else {
+        distractors++;
+        if (claimed) {
+          nFalseAlarms++;
+        } else {
+          nCorrectRejections++;
+        }
+      }
     }
 
-    // --- Speed (earned: gated by accuracy) ---
-    final double avgMs = hitReactionTimes.isEmpty
-        ? 1000.0
-        : hitReactionTimes.reduce((a, b) => a + b) / hitReactionTimes.length;
+    // If a class is missing, we cannot defensibly score discrimination components.
+    if (targets == 0 || distractors == 0) {
+      return {
+        "Working Memory": 0.0,
+        "Response Inhibition": 0.0,
+        "Reaction Time (Choice)": 0.0,
+        "Observation / Vigilance": 0.0,
+      };
+    }
 
-    // 350ms fast .. 1000ms slow
-    final double rawSpeed = (1.0 - ((avgMs - 350.0) / 650.0)).clamp(0.0, 1.0);
+    // ---- Intermediate metrics (transparent) ----
+    final double hitRate = nHits / targets;
+    final double specificity = nCorrectRejections / distractors;
+    final double falseAlarmRate = nFalseAlarms / distractors;
 
-    // Gate speed by correctness: fast but wrong should not score high
-    final double speed = (rawSpeed * f1).clamp(0.0, 1.0);
+    final double balancedAcc = (hitRate + specificity) / 2.0;
+
+    // ---- Skill scores ----
+
+    // Working Memory: catch n-back targets, gated by not mashing (specificity).
+    final double workingMemory = clamp01(hitRate * specificity);
+
+    // Response Inhibition: resist pressing on non-targets (false alarms are direct failures).
+    final double responseInhibition = clamp01(1.0 - falseAlarmRate);
+
+    // Observation / Vigilance: stable discrimination quality across time, gated by competence.
+    double observationVigilance = 0.0;
+    {
+      final int split = totalTrials ~/ 2;
+
+      int t1 = 0, d1 = 0, h1 = 0, cr1 = 0;
+      int t2 = 0, d2 = 0, h2 = 0, cr2 = 0;
+
+      for (int i = 0; i < totalTrials; i++) {
+        final bool isTarget = _isMatch(i);
+        final bool claimed = seq[i].userClaimed;
+        final bool firstHalf = i < split;
+
+        if (firstHalf) {
+          if (isTarget) { t1++; if (claimed) h1++; }
+          else { d1++; if (!claimed) cr1++; }
+        } else {
+          if (isTarget) { t2++; if (claimed) h2++; }
+          else { d2++; if (!claimed) cr2++; }
+        }
+      }
+
+      // Need evidence in BOTH halves; otherwise no vigilance claim.
+      if (t1 > 0 && d1 > 0 && t2 > 0 && d2 > 0) {
+        final double ba1 = ((h1 / t1) + (cr1 / d1)) / 2.0;
+        final double ba2 = ((h2 / t2) + (cr2 / d2)) / 2.0;
+
+        final double stability = clamp01(1.0 - (ba1 - ba2).abs());
+        observationVigilance = clamp01(stability * balancedAcc);
+      } else {
+        observationVigilance = 0.0;
+      }
+    }
+
+    // Reaction Time (Choice): median RT on correct “match” decisions, gated by discrimination quality.
+    double reactionTimeChoice = 0.0;
+    {
+      if (hitReactionTimes.length >= 3 && balancedAcc > 0.0) {
+        final sorted = List<int>.from(hitReactionTimes)..sort();
+        final int mid = sorted.length ~/ 2;
+        final double medianMs = (sorted.length.isOdd)
+            ? sorted[mid].toDouble()
+            : ((sorted[mid - 1] + sorted[mid]) / 2.0);
+
+        const double bestMs = 250.0;
+        const double worstMs = 1200.0; // matches the stimulus interval scale
+        final double raw = clamp01(1.0 - ((medianMs - bestMs) / (worstMs - bestMs)));
+
+        reactionTimeChoice = clamp01(raw * balancedAcc);
+      } else {
+        reactionTimeChoice = 0.0;
+      }
+    }
 
     return {
-      "Working Memory": f1.clamp(0.0, 1.0),
-      "Associative Memory": assoc,
-      "Response Inhibition": inhibition.clamp(0.0, 1.0),
-      "Information Processing Speed": speed,
-      "Observation / Vigilance": vigilance,
+      "Working Memory": workingMemory,
+      "Response Inhibition": responseInhibition,
+      "Reaction Time (Choice)": reactionTimeChoice,
+      "Observation / Vigilance": observationVigilance,
     };
   }
 

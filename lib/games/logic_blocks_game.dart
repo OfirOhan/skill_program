@@ -28,6 +28,17 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   int levelsSolved = 0;
   int moves = 0;
 
+  // --- NEW: per-level evidence (tracking only) ---
+  int _levelStartMs = 0;
+  int _levelMoves = 0;
+  final Map<int, int> _tileTapCounts = {}; // key = r*gridSize + c
+
+  final List<int> _playedGridSizes = [];
+  final List<bool> _levelSolved = [];
+  final List<int> _levelTimeMs = [];
+  final List<int> _levelMovesList = [];
+  final List<int> _levelWastedCycles = [];
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +49,29 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   void dispose() {
     _levelTimer?.cancel();
     super.dispose();
+  }
+
+  int _computeWastedCycles() {
+    int cycles = 0;
+    for (final c in _tileTapCounts.values) {
+      cycles += (c ~/ 4); // 4 taps returns to same rotation => definite wasted loop(s)
+    }
+    return cycles;
+  }
+
+  void _recordLevelResult({required bool solved}) {
+    final int limitMs = remainingSeconds <= 0 ? 15000 : 15000; // fixed level limit
+    final int now = DateTime.now().millisecondsSinceEpoch;
+
+    final int timeTaken = solved
+        ? (now - _levelStartMs).clamp(0, limitMs)
+        : limitMs;
+
+    _playedGridSizes.add(gridSize);
+    _levelSolved.add(solved);
+    _levelTimeMs.add(timeTaken);
+    _levelMovesList.add(_levelMoves);
+    _levelWastedCycles.add(_computeWastedCycles());
   }
 
   void _startTimer() {
@@ -59,7 +93,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   void _handleTimeout() {
     if (isProcessingWin) return;
     _levelTimer?.cancel();
-
+    _recordLevelResult(solved: false);
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Time's Up! Moving to next level..."),
@@ -106,6 +140,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
         }
       }
     }
+    _levelStartMs = DateTime.now().millisecondsSinceEpoch;
+    _levelMoves = 0;
+    _tileTapCounts.clear();
 
     _checkFlow();
     _startTimer();
@@ -123,6 +160,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     // ------------------------
 
     setState(() {
+      _levelMoves++;
+      final key = r * gridSize + c;
+      _tileTapCounts[key] = (_tileTapCounts[key] ?? 0) + 1;
       grid[r][c].rotation = (grid[r][c].rotation + 1) % 4;
       moves++;
     });
@@ -171,7 +211,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   void _triggerWin() {
     if (isProcessingWin) return;
     isProcessingWin = true; // LOCK
-
+    _recordLevelResult(solved: true);
     // Optional: Win Sound/Vibration
     HapticFeedback.vibrate();
 
@@ -206,55 +246,89 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   Map<String, double> grade() {
-    final double completion = (levelsSolved / totalLevels.toDouble()).clamp(0.0, 1.0);
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
 
-    // Efficiency based on moves per solved level.
-    // We normalize by grid size difficulty: later levels are larger (3,4,6).
-    // Since you don’t store per-level moves, we keep it conservative.
-    //
-    // Baseline: ~18 moves per solved level is "good", 35+ is "inefficient".
-    final int solved = levelsSolved;
-    double movesPerSolved = solved == 0 ? 999.0 : (moves / solved);
+    final int n = [
+      _playedGridSizes.length,
+      _levelSolved.length,
+      _levelTimeMs.length,
+      _levelMovesList.length,
+      _levelWastedCycles.length,
+    ].reduce((a, b) => a < b ? a : b);
 
-    // Map movesPerSolved to 0..1
-    double efficiency = 0.0;
-    if (solved > 0) {
-      // 18 -> 1.0, 35 -> 0.0
-      efficiency = (1.0 - ((movesPerSolved - 18.0) / 17.0)).clamp(0.0, 1.0);
-    } else {
-      efficiency = 0.0;
+    if (n <= 0) {
+      return {
+        "Deductive Reasoning": 0.0,
+        "Algorithmic Logic": 0.0,
+        "Information Processing Speed": 0.0,
+      };
     }
 
-    // Deductive reasoning: completing levels is the best available proxy.
-    // Small weight from efficiency (solving with fewer contradictions/backtracks).
-    final double deductive = (0.80 * completion + 0.20 * efficiency).clamp(0.0, 1.0);
+    // --- Completion weighted by problem size (tiles = gridSize^2) ---
+    double totalW = 0.0;
+    double solvedW = 0.0;
 
-    // Algorithmic logic: strongly tied to efficiency (systematic search),
-    // but only meaningful if they solved something.
-    final double algorithmic = solved == 0
-        ? 0.0
-        : (0.65 * efficiency + 0.35 * completion).clamp(0.0, 1.0);
+    for (int i = 0; i < n; i++) {
+      final int size = _playedGridSizes[i];
+      final double w = (size * size).toDouble(); // defensible difficulty weight
+      totalW += w;
+      if (_levelSolved[i]) solvedW += w;
+    }
 
-    // Systems thinking: connectivity/global flow understanding.
-    // Completion is dominant; efficiency provides a slight refinement.
-    final double systemsThinking = (0.85 * completion + 0.15 * efficiency).clamp(0.0, 1.0);
+    final double completion = totalW <= 0 ? 0.0 : clamp01(solvedW / totalW);
 
-    // Planning & prioritization: minimize wasted moves.
-    final double planning = efficiency;
+    // --- Deductive Reasoning: solving these constraint puzzles is the direct evidence ---
+    final double deductiveReasoning = completion;
 
-    // Decision under pressure: timed levels; with no time logs,
-    // the honest proxy is simply how much they completed within constraints.
-    // Reward completion, with a small reward for efficiency (less dithering).
-    final double pressure = (0.75 * completion + 0.25 * efficiency).clamp(0.0, 1.0);
+    // --- Algorithmic Logic: efficiency, using only non-arbitrary evidence ---
+    // 1) moves-per-tile (lower is better)
+    // 2) wasted full-cycles (4 taps return to same state => definite dithering)
+    double algoSum = 0.0;
+
+    for (int i = 0; i < n; i++) {
+      final int size = _playedGridSizes[i];
+      final int tiles = size * size;
+
+      final int mv = _levelMovesList[i];
+      final int cycles = _levelWastedCycles[i];
+
+      final double movesPerTile = tiles == 0 ? 999.0 : (mv / tiles);
+      final double movesScore = 1.0 / (1.0 + movesPerTile);     // 0..1, no magic thresholds
+      final double cyclesScore = 1.0 / (1.0 + cycles.toDouble()); // 0..1, conservative
+
+      // Combine; only count strongly if they solved (avoid rewarding random spinning)
+      final double perLevelAlgo = _levelSolved[i]
+          ? sqrt(movesScore * cyclesScore)
+          : 0.0;
+
+      algoSum += perLevelAlgo;
+    }
+
+    final double algorithmicLogic = clamp01(algoSum / n);
+
+    // --- Information Processing Speed: median level time, earned & gated by completion ---
+    double informationProcessingSpeed = 0.0;
+    {
+      final times = _levelTimeMs.take(n).toList()..sort();
+      final int mid = times.length ~/ 2;
+      final double medianMs = times.length.isOdd
+          ? times[mid].toDouble()
+          : ((times[mid - 1] + times[mid]) / 2.0);
+
+      const double limitMs = 15000.0;
+      final double rawSpeed = clamp01(1.0 - (medianMs / limitMs));
+
+      // Earned: no speed points if they didn't complete levels
+      informationProcessingSpeed = clamp01(rawSpeed * completion);
+    }
 
     return {
-      "Deductive Reasoning": deductive,
-      "Algorithmic Logic": algorithmic,
-      "Systems Thinking": systemsThinking,
-      "Planning & Prioritization": planning,
-      "Decision Under Pressure": pressure,
+      "Deductive Reasoning": deductiveReasoning,
+      "Algorithmic Logic": algorithmicLogic,
+      "Information Processing Speed": informationProcessingSpeed,
     };
   }
+
 
 
   @override

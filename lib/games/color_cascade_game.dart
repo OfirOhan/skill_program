@@ -36,6 +36,8 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   Color? feedbackColor;
   String? feedbackText;
 
+  static const int _timeoutPenaltyMs = 25000; // treat no-answer as very slow
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +138,10 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
 
   void _handleTimeout() {
     _roundTimer?.cancel();
+
+    // record a speed penalty for "no answer"
+    reactionTimes.add(_timeoutPenaltyMs);
+
     _showFeedback(false, isTimeout: true);
   }
 
@@ -146,12 +152,16 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
 
   // --- ROUND 1 LOGIC (Sorting) ---
   void _checkSort() {
+    if (isGameOver || feedbackColor != null) return;
+    _roundTimer?.cancel();
+
+    final rt = DateTime.now().millisecondsSinceEpoch - startMs;
+    reactionTimes.add(rt);
+
     double score = 0;
     int checks = reorderableList.length - 1;
 
     for (int i = 0; i < checks; i++) {
-      // Check ordering by Luminance (High -> Low)
-      // Using >= to handle cases where variance is so low float math is weird
       if (reorderableList[i].computeLuminance() >= reorderableList[i+1].computeLuminance() - 0.0001) {
         score++;
       }
@@ -170,9 +180,11 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
     }
   }
 
+
   // --- ROUND 2/3/4 LOGIC (Grid Tap) ---
   void _onGridTap(int index) {
     if (isGameOver || feedbackColor != null) return;
+    _roundTimer?.cancel();
     HapticFeedback.lightImpact();
 
     final rt = DateTime.now().millisecondsSinceEpoch - startMs;
@@ -188,6 +200,7 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
       _showFeedback(false);
     }
   }
+
 
   void _showFeedback(bool correct, {bool isTimeout = false}) {
     setState(() {
@@ -207,17 +220,40 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   }
 
   Map<String, double> grade() {
-    double accuracy = totalCorrect / 4.0;
-    double precision = totalPrecision / 4.0;
+    const int rounds = 4;
+
+    // Strict round wins (perfect sort + correct odd-tap rounds)
+    final double strictAccuracy = (totalCorrect / rounds).clamp(0.0, 1.0);
+
+    // Precision includes partial credit on sort + 0/1 on grid rounds
+    final double precision = (totalPrecision / rounds).clamp(0.0, 1.0);
+
+    // Speed (includes timeout penalties)
+    final double avgRt = reactionTimes.isEmpty
+        ? _timeoutPenaltyMs.toDouble()
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+
+    // 1200ms = fast, 25000ms = very slow
+    final double rawSpeed = (1.0 - ((avgRt - 1200.0) / (_timeoutPenaltyMs - 1200.0))).clamp(0.0, 1.0);
+
+    // Speed only counts if perception was actually good (anti-guess / anti-random tapping)
+    final double earnedSpeed = (rawSpeed * precision).clamp(0.0, 1.0);
+
+    final double colorDiscrimination = precision;
+    final double visualAcuity = (0.7 * precision + 0.3 * strictAccuracy).clamp(0.0, 1.0);
+    final double patternRecognition = (0.6 * strictAccuracy + 0.4 * precision).clamp(0.0, 1.0);
+
+    final double decisionUnderPressure = (0.8 * strictAccuracy + 0.2 * rawSpeed).clamp(0.0, 1.0);
 
     return {
-      "Color Differentiation": accuracy,
-      "Aesthetic Sensitivity": precision,
-      "Visual Perception Accuracy": accuracy,
-      "Attention to Detail": precision * 0.9,
-      "Pattern Recognition": accuracy,
+      "Color Discrimination": colorDiscrimination,
+      "Visual Acuity": visualAcuity,
+      "Pattern Recognition": patternRecognition,
+      "Information Processing Speed": earnedSpeed,
+      "Decision Under Pressure": decisionUnderPressure,
     };
   }
+
 
   // --- GENERATORS ---
   List<Color> _generateGradient(ColorBase base, int steps, {double variance = 0.3}) {

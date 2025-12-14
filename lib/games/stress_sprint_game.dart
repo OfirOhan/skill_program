@@ -34,6 +34,15 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
   int maxLevelReached = 0;
   bool panicFailure = false;
 
+  // --- NEW: measurable metrics ---
+  int solvedCount = 0;               // how many puzzles solved correctly
+  int crashCount = 0;               // 0 or 1 (because game ends on crash)
+  bool crashedByTimeout = false;
+
+  int roundStartMs = 0;
+  int roundLimitMs = 0;             // current time limit in ms
+  final List<double> timeFractions = []; // elapsed/limit per answered puzzle (0..1)
+
   @override
   void initState() {
     super.initState();
@@ -57,17 +66,19 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     if (isGameOver) return;
 
     setState(() {
-      // Escalating Difficulty
       timeLimit = max(1.5, 5.0 - (level * 0.3));
 
       _generateMathProblem();
 
-      // Reset Timer
-      _progressController.duration = Duration(milliseconds: (timeLimit * 1000).toInt());
+      roundStartMs = DateTime.now().millisecondsSinceEpoch;
+      roundLimitMs = (timeLimit * 1000).toInt();
+
+      _progressController.duration = Duration(milliseconds: roundLimitMs);
       _progressController.reset();
       _progressController.forward();
     });
   }
+
 
   void _generateMathProblem() {
     final rand = Random();
@@ -95,33 +106,43 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     }
 
     Set<int> opts = {correctAnswer};
-    while(opts.length < 3) {
-      opts.add(correctAnswer + (rand.nextInt(10) - 5));
+    while (opts.length < 3) {
+      int delta = (rand.nextInt(9) + 1) * (rand.nextBool() ? 1 : -1);
+      int cand = correctAnswer + delta;
+      if (cand >= 0) opts.add(cand);
     }
-    while(opts.length < 3) opts.add(rand.nextInt(100));
-
     options = opts.toList()..shuffle();
+
   }
 
   void _onOptionSelected(int selected) {
     if (isGameOver) return;
 
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final elapsed = (now - roundStartMs).clamp(0, max(1, roundLimitMs));
+    final frac = (elapsed / max(1, roundLimitMs)).clamp(0.0, 1.0);
+    timeFractions.add(frac);
+
     if (selected == correctAnswer) {
       setState(() {
+        solvedCount++; // NEW
         currentPot += (level * 10);
         level++;
-        maxLevelReached = level;
+        maxLevelReached = max(maxLevelReached, level); // safer than overwrite
       });
       HapticFeedback.mediumImpact();
       _nextPuzzle();
     } else {
       HapticFeedback.heavyImpact();
+      crashedByTimeout = false; // NEW
       _handleCrash("Wrong Answer!");
     }
   }
 
+
   void _handleTimeout() {
     HapticFeedback.vibrate();
+    crashedByTimeout = true; // NEW
     _handleCrash("Time's Up!");
   }
 
@@ -130,9 +151,11 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     setState(() {
       isGameOver = true;
       panicFailure = true;
+      crashCount = 1;     // NEW
       currentPot = 0;
     });
   }
+
 
   void _cashOut() {
     _progressController.stop();
@@ -145,18 +168,41 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
   }
 
   Map<String, double> grade() {
-    double riskScore = hasCashedOut ? 1.0 : 0.0;
-    double stress = (maxLevelReached / 10.0).clamp(0.0, 1.0);
-    double regulation = panicFailure ? 0.2 : 1.0;
+    // Performance (how far you got) — cap at 10 solves for normalization
+    final double levelScore = (solvedCount / 10.0).clamp(0.0, 1.0);
+
+    // Speed: based on how much of the time window you used (lower fraction = faster)
+    // Convert fraction to speed: 0.0 used -> 1.0 speed, 1.0 used -> 0.0 speed
+    final double avgFrac = timeFractions.isEmpty
+        ? 1.0
+        : (timeFractions.reduce((a, b) => a + b) / timeFractions.length).clamp(0.0, 1.0);
+
+    final double rawSpeed = (1.0 - avgFrac).clamp(0.0, 1.0);
+
+    // Quantitative Reasoning: difficulty progression is the strongest evidence here
+    final double quantitative = levelScore;
+
+    // Information Processing Speed: speed only “counts” if you actually solved things
+    final double infoSpeed = (rawSpeed * levelScore).clamp(0.0, 1.0);
+
+    // Decision Under Pressure: mix of progression + speed, with extra penalty if you timed out
+    final double timeoutPenalty = crashedByTimeout ? 0.20 : 0.0;
+    final double decisionUnderPressure =
+    (0.75 * levelScore + 0.25 * rawSpeed - timeoutPenalty).clamp(0.0, 1.0);
+
+    // Risk Management: only direct signal available is whether they used CASH OUT.
+    // (Coarse by design: the game ends immediately after cashout.)
+    final double riskManagement =
+    hasCashedOut ? (0.6 + 0.4 * levelScore).clamp(0.0, 1.0) : (0.15 * levelScore).clamp(0.0, 1.0);
 
     return {
-      "Stress Tolerance": stress,
-      "Frustration Handling": regulation,
-      "Persistence": stress,
-      "Resilience": hasCashedOut ? 0.8 : 0.2,
-      "Decision Making Under Pressure": (riskScore * 0.6 + stress * 0.4).clamp(0.0, 1.0),
+      "Quantitative Reasoning": quantitative,
+      "Information Processing Speed": infoSpeed,
+      "Decision Under Pressure": decisionUnderPressure,
+      "Risk Management": riskManagement,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

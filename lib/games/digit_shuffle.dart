@@ -45,6 +45,13 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   int processTrials = 0;
   int mathTrials = 0;
 
+  int currentTaskType = 0; // 0=Recall, 1=Sort, 2=Add
+  int currentAddVal = 0;
+
+  final List<int> roundTaskTypes = [];
+  final List<int> roundTimesMs = [];
+  final List<double> roundAccuracies = [];
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +95,9 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     int addVal = 0;
     if (taskType == 2) addVal = rand.nextInt(3) + 1;
 
+    currentTaskType = taskType;
+    currentAddVal = addVal;
+
     setState(() {
       isMemorizing = true;
       userAnswer = [];
@@ -108,7 +118,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
         } else if (taskType == 1) {
           instruction = "Sort: Low to High";
           expected = List.from(sequence)..sort();
-          processTrials++;
+          processTrials++; // you can keep this if you want, but it won’t be needed for grade()
         } else {
           instruction = "Add $addVal to each!";
           expected = sequence.map((e) => e + addVal).toList();
@@ -169,6 +179,10 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     final rt = DateTime.now().millisecondsSinceEpoch - startInputMs;
     totalProcessTime += rt;
 
+    roundTaskTypes.add(currentTaskType);
+    roundTimesMs.add(rt.clamp(0, 15000)); // bounded by the round limit; no free speed artifacts
+    roundAccuracies.add(roundAccuracy);
+
     if (instruction.contains("Recall")) {
       sumRecallAccuracy += roundAccuracy;
     } else {
@@ -187,7 +201,10 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   }
 
   Map<String, double> grade() {
-    if (roundsPlayed == 0) {
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
+    final int n = min(roundAccuracies.length, min(roundTimesMs.length, roundTaskTypes.length));
+    if (n <= 0) {
       return {
         "Rote Memorization": 0.0,
         "Working Memory": 0.0,
@@ -197,62 +214,86 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
       };
     }
 
-    // --- Core Accuracies (no guessing / no imputation) ---
-    double roteMem = recallTrials > 0
-        ? (sumRecallAccuracy / recallTrials).clamp(0.0, 1.0)
-        : 0.0;
+    // --- Helpers ---
+    double meanOf(List<double> xs) => xs.isEmpty ? 0.0 : xs.reduce((a, b) => a + b) / xs.length;
+    double meanInt(List<int> xs) => xs.isEmpty ? 0.0 : xs.reduce((a, b) => a + b) / xs.length;
 
-    double workingMem = processTrials > 0
-        ? (sumProcessAccuracy / processTrials).clamp(0.0, 1.0)
-        : 0.0;
+    // --- Overall accuracy for gating (no imputation) ---
+    final double overallAccuracy = clamp01(meanOf(roundAccuracies.take(n).toList()));
 
-    double quantitative = mathTrials > 0
-        ? (sumMathAccuracy / mathTrials).clamp(0.0, 1.0)
-        : 0.0;
+    // --- Skill: Rote Memorization (Recall-only) ---
+    final recallAcc = <double>[];
+    // --- Skill: Working Memory (Sort-only to avoid overlap with Quantitative) ---
+    final sortAcc = <double>[];
+    // --- Skill: Quantitative Reasoning (Add-only) ---
+    final addAcc = <double>[];
 
-    // --- Information Processing Speed (earned, not raw) ---
-    double totalAccuracy = (sumTotalAccuracy / roundsPlayed).clamp(0.0, 1.0);
-    double avgTimeMs = totalProcessTime / roundsPlayed;
+    for (int i = 0; i < n; i++) {
+      final t = roundTaskTypes[i];
+      final a = roundAccuracies[i];
+      if (t == 0) recallAcc.add(a);
+      if (t == 1) sortAcc.add(a);
+      if (t == 2) addAcc.add(a);
+    }
 
-    // 4s = excellent, 15s = slow/timeout range
-    double rawSpeed = (1.0 - ((avgTimeMs - 4000) / 11000)).clamp(0.0, 1.0);
+    final double roteMemorization = clamp01(meanOf(recallAcc));
+    final double workingMemory = clamp01(meanOf(sortAcc));           // 0 if no sort evidence
+    final double quantitativeReasoning = clamp01(meanOf(addAcc));    // 0 if no add evidence
 
-    // Speed only counts if you're accurate
-    double processingSpeed = (rawSpeed * totalAccuracy).clamp(0.0, 1.0);
+    // --- Skill: Information Processing Speed (earned; gated by accuracy) ---
+    // Use median time normalized by 15s limit (no magic "4s excellent").
+    double informationProcessingSpeed = 0.0;
+    {
+      final times = roundTimesMs.take(n).toList()..sort();
+      final int mid = times.length ~/ 2;
+      final double medianMs = times.length.isOdd
+          ? times[mid].toDouble()
+          : ((times[mid - 1] + times[mid]) / 2.0);
 
-    // --- Cognitive Flexibility (only if 2+ task types occurred) ---
-    final List<double> modes = [];
-    if (recallTrials > 0) modes.add(roteMem);
-    if (processTrials > 0) modes.add(workingMem);
-    if (mathTrials > 0) modes.add(quantitative);
+      final double rawSpeed = clamp01(1.0 - (medianMs / 15000.0));
+      informationProcessingSpeed = clamp01(rawSpeed * overallAccuracy);
+    }
 
+    // --- Skill: Cognitive Flexibility (direct switch-cost evidence) ---
+    // Needs BOTH switch and stay transitions; otherwise 0 (no evidence).
     double cognitiveFlexibility = 0.0;
-    if (modes.length >= 2) {
-      double mean = modes.reduce((a, b) => a + b) / modes.length;
+    {
+      if (n >= 2) {
+        final switchIdx = <int>[];
+        final stayIdx = <int>[];
 
-      double variance = 0.0;
-      for (final v in modes) {
-        variance += pow(v - mean, 2).toDouble();
+        for (int i = 1; i < n; i++) {
+          final bool isSwitch = roundTaskTypes[i] != roundTaskTypes[i - 1];
+          (isSwitch ? switchIdx : stayIdx).add(i);
+        }
+
+        if (switchIdx.isNotEmpty && stayIdx.isNotEmpty) {
+          final double switchAcc = meanOf(switchIdx.map((i) => roundAccuracies[i]).toList());
+          final double stayAcc = meanOf(stayIdx.map((i) => roundAccuracies[i]).toList());
+
+          final double switchTime = meanInt(switchIdx.map((i) => roundTimesMs[i]).toList());
+          final double stayTime = meanInt(stayIdx.map((i) => roundTimesMs[i]).toList());
+
+          // Ratio-based (no arbitrary weights), then gated by competence
+          final double accRatio = (stayAcc <= 0.0) ? 0.0 : clamp01(switchAcc / stayAcc);
+          final double timeRatio = (switchTime <= 0.0) ? 0.0 : clamp01(stayTime / switchTime);
+
+          cognitiveFlexibility = clamp01(((accRatio + timeRatio) / 2.0) * overallAccuracy);
+        } else {
+          cognitiveFlexibility = 0.0;
+        }
       }
-      variance /= modes.length;
-
-      double stdDev = sqrt(variance);
-
-      // Lower variance across modes = better flexibility
-      cognitiveFlexibility = (1.0 - stdDev).clamp(0.0, 1.0);
-    } else {
-      // Not enough evidence of switching
-      cognitiveFlexibility = 0.0;
     }
 
     return {
-      "Rote Memorization": roteMem,
-      "Working Memory": workingMem,
-      "Quantitative Reasoning": quantitative,
-      "Information Processing Speed": processingSpeed,
+      "Rote Memorization": roteMemorization,
+      "Working Memory": workingMemory,
+      "Quantitative Reasoning": quantitativeReasoning,
+      "Information Processing Speed": informationProcessingSpeed,
       "Cognitive Flexibility": cognitiveFlexibility,
     };
   }
+
 
 
   @override

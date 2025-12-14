@@ -27,6 +27,13 @@ class _RoleplayGameState extends State<RoleplayGame> {
   Color? feedbackColor;
   String? feedbackText;
 
+  static const int timePerRound = 12;     // keep what you actually use
+  static const int timeoutPenaltyMs = 12000;
+
+  int startMs = 0;
+  List<int> reactionTimes = [];
+  List<bool> results = []; // true/false per cue index (timeouts = false)
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +54,8 @@ class _RoleplayGameState extends State<RoleplayGame> {
     }
 
     setState(() {
-      remainingSeconds = 12;
+      remainingSeconds = timePerRound;
+      startMs = DateTime.now().millisecondsSinceEpoch;
       feedbackColor = null;
       feedbackText = null;
     });
@@ -62,9 +70,16 @@ class _RoleplayGameState extends State<RoleplayGame> {
   }
 
   void _handleTimeout() {
+    if (isGameOver || feedbackColor != null) return;
     _roundTimer?.cancel();
+
+    // record as a wrong attempt + max-time RT (anti-free-pass)
+    reactionTimes.add(timeoutPenaltyMs);
+    results.add(false);
+
     _showFeedback(false, "Too Slow!");
   }
+
 
   void _finishGame() {
     _roundTimer?.cancel();
@@ -78,11 +93,14 @@ class _RoleplayGameState extends State<RoleplayGame> {
     final cue = cues[index];
     final choice = cue.options[optionIndex];
 
-    if (choice.isCorrect) {
+    final rt = DateTime.now().millisecondsSinceEpoch - startMs;
+    reactionTimes.add(rt);
+
+    final isCorrect = choice.isCorrect;
+    results.add(isCorrect);
+
+    if (isCorrect) {
       correctCount++;
-      // Weight scoring based on difficulty type
-      if (cue.type == CueType.subtext) eqScore += 2;
-      if (cue.type == CueType.cultural) sqScore += 2;
       HapticFeedback.mediumImpact();
       _showFeedback(true, "Spot On.");
     } else {
@@ -90,6 +108,7 @@ class _RoleplayGameState extends State<RoleplayGame> {
       _showFeedback(false, "Misread.");
     }
   }
+
 
   void _showFeedback(bool positive, String text) {
     setState(() {
@@ -107,19 +126,66 @@ class _RoleplayGameState extends State<RoleplayGame> {
   }
 
   Map<String, double> grade() {
-    double accuracy = cues.isEmpty ? 0.0 : correctCount / cues.length;
+    final int n = cues.length;
+    if (n == 0) {
+      return {
+        "Pragmatics": 0.0,
+        "Social Context Awareness": 0.0,
+        "Decision Under Pressure": 0.0,
+        "Reading Comprehension Speed": 0.0,
+      };
+    }
+
+    // Ensure results length matches n (safety)
+    final int m = results.length.clamp(0, n);
+    final int correct = results.take(m).where((x) => x).length;
+
+    final double accuracy = (correct / n).clamp(0.0, 1.0);
+
+    // Avg RT (timeouts included via penalty)
+    final double avgRt = reactionTimes.isEmpty
+        ? timeoutPenaltyMs.toDouble()
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+
+    // Speed mapping: 1200ms fast, 12000ms slow
+    final double rawSpeed =
+    (1.0 - ((avgRt - 1200.0) / (timeoutPenaltyMs - 1200.0))).clamp(0.0, 1.0);
+
+    // Earned speed (anti-guess): speed only counts if accurate
+    final double earnedSpeed = (rawSpeed * accuracy).clamp(0.0, 1.0);
+
+    // Type-specific accuracy (more honest than “EQ/SQ”)
+    int subN = 0, subC = 0;
+    int nonSubN = 0, nonSubC = 0;
+
+    for (int i = 0; i < n && i < m; i++) {
+      final isSub = cues[i].type == CueType.subtext;
+      if (isSub) {
+        subN++;
+        if (results[i]) subC++;
+      } else {
+        nonSubN++;
+        if (results[i]) nonSubC++;
+      }
+    }
+
+    final double subAcc = subN == 0 ? accuracy : (subC / subN).clamp(0.0, 1.0);
+    final double nonSubAcc = nonSubN == 0 ? accuracy : (nonSubC / nonSubN).clamp(0.0, 1.0);
+
+    // --- Canonical skills ---
+    final double pragmatics = subAcc;               // implied meaning / subtext
+    final double socialContext = nonSubAcc;         // power/cultural context interpretation
+    final double decisionUnderPressure = (0.80 * accuracy + 0.20 * rawSpeed).clamp(0.0, 1.0);
+    final double readingSpeed = earnedSpeed;        // timed text understanding
 
     return {
-      "Empathy Accuracy": accuracy, // Reading emotions
-      "Social Awareness": accuracy * 0.9, // Understanding dynamics
-      "Cultural Sensitivity": (sqScore / 5.0).clamp(0.0, 1.0), // Indirectness check
-      "Active Listening": accuracy, // Context attention
-      "Conflict Resolution": accuracy * 0.8, // Identifying root cause
-      "Persuasion Ability": accuracy * 0.7,
-      "Team Coordination": accuracy * 0.8,
-      "Negotiation Ability": accuracy * 0.8,
+      "Pragmatics": pragmatics,
+      "Social Context Awareness": socialContext,
+      "Decision Under Pressure": decisionUnderPressure,
+      "Reading Comprehension Speed": readingSpeed,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

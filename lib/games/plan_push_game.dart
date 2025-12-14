@@ -32,6 +32,24 @@ class _PlanPushGameState extends State<PlanPushGame> {
   int overtimeErrors = 0;
   int underTimeErrors = 0;
 
+  // --- NEW: per-day analytics ---
+  int roundStartMs = 0;
+  bool daySubmitted = false;
+
+  final List<int> optimalValues = [];
+  final List<int> earnedValues = [];
+  final List<int> submitRTs = []; // ms
+
+  int _optimalValue(List<TaskItem> tasks, int maxHours) {
+    final dp = List<int>.filled(maxHours + 1, 0);
+    for (final t in tasks) {
+      for (int h = maxHours; h >= t.duration; h--) {
+        dp[h] = max(dp[h], dp[h - t.duration] + t.value);
+      }
+    }
+    return dp[maxHours];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +63,10 @@ class _PlanPushGameState extends State<PlanPushGame> {
   }
 
   void _startRoundTimer() {
-    remainingSeconds = 30; // Reset to 30s every round
+    remainingSeconds = 30;
+    roundStartMs = DateTime.now().millisecondsSinceEpoch; // NEW
+    daySubmitted = false; // NEW
+
     _roundTimer?.cancel();
     _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
@@ -54,6 +75,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
       }
     });
   }
+
 
   void _finishGame() {
     _roundTimer?.cancel();
@@ -65,8 +87,7 @@ class _PlanPushGameState extends State<PlanPushGame> {
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Day ended automatically!"), duration: Duration(milliseconds: 800))
     );
-    // Auto-submit whatever they have selected
-    _submitDay();
+    _submitDay(timedOut: true);
   }
 
   void _startLevel() {
@@ -89,7 +110,9 @@ class _PlanPushGameState extends State<PlanPushGame> {
         availableTasks = _generateTasks(8, 12, withDistractors: true);
       }
 
-      maxPossibleScore += availableTasks.fold(0, (sum, item) => sum + item.value);
+      final optimal = _optimalValue(availableTasks, workDayHours);
+      optimalValues.add(optimal);
+      maxPossibleScore += optimal; // keep if you still want this number shown/debugged
     });
 
     _startRoundTimer(); // Start new timer for this level
@@ -108,9 +131,15 @@ class _PlanPushGameState extends State<PlanPushGame> {
     });
   }
 
-  void _submitDay() {
-    // Stop timer immediately to prevent double-firing
+  void _submitDay({bool timedOut = false}) {
+    if (daySubmitted) return;         // NEW guard
+    daySubmitted = true;
+
     _roundTimer?.cancel();
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rt = timedOut ? 30000 : (now - roundStartMs).clamp(0, 30000);
+    submitRTs.add(rt);
 
     int usedTime = scheduledTasks.fold(0, (sum, item) => sum + item.duration);
     int score = scheduledTasks.fold(0, (sum, item) => sum + item.value);
@@ -142,7 +171,8 @@ class _PlanPushGameState extends State<PlanPushGame> {
       }
     }
 
-    // Delay slightly to show snackbar before next level refresh
+    earnedValues.add(score); // NEW: store earned for grading
+
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
         setState(() {
@@ -154,20 +184,51 @@ class _PlanPushGameState extends State<PlanPushGame> {
     });
   }
 
+
   Map<String, double> grade() {
-    double timeMgmt = 1.0 - ((overtimeErrors + underTimeErrors) / 3.0);
-    double rawRatio = maxPossibleScore == 0 ? 0 : totalScore / (maxPossibleScore * 0.6);
-    double prioritization = (rawRatio - 0.5) * 2.0;
+    final int days = earnedValues.length;
+    if (days == 0) {
+      return {
+        "Planning & Prioritization": 0.0,
+        "Constraint Management": 0.0,
+        "Risk Management": 0.0,
+        "Decision Under Pressure": 0.0,
+      };
+    }
+
+    // 1) Quality vs optimal (true scheduling effectiveness)
+    double sumQuality = 0.0;
+    for (int i = 0; i < days; i++) {
+      final opt = max(1, optimalValues[i]);
+      sumQuality += (earnedValues[i] / opt).clamp(0.0, 1.0);
+    }
+    final double avgQuality = (sumQuality / days).clamp(0.0, 1.0);
+
+    // 2) Constraint Management: staying within time + not wasting big chunks
+    final double constraintManagement =
+    (1.0 - ((overtimeErrors * 0.75 + underTimeErrors * 0.25) / days)).clamp(0.0, 1.0);
+
+    // 3) Risk Management: strongly about avoiding overtime (hard constraint violation)
+    final double riskManagement =
+    (1.0 - (overtimeErrors / days)).clamp(0.0, 1.0);
+
+    // 4) Decision Under Pressure: quality + submit speed (small weight)
+    final double avgRt = submitRTs.isEmpty
+        ? 30000.0
+        : submitRTs.reduce((a, b) => a + b) / submitRTs.length;
+
+    // 4s fast, 30s slow
+    final double rawSpeed = (1.0 - ((avgRt - 4000.0) / 26000.0)).clamp(0.0, 1.0);
+    final double decisionUnderPressure = (0.8 * avgQuality + 0.2 * rawSpeed).clamp(0.0, 1.0);
 
     return {
-      "Planning & Prioritization": prioritization.clamp(0.0, 1.0),
-      "Task Management": timeMgmt.clamp(0.0, 1.0),
-      "Resource Allocation": timeMgmt,
-      "Long-Term Strategy Building": (prioritization * 0.8 + timeMgmt * 0.2).clamp(0.0, 1.0),
-      "Time Estimation Skill": (1.0 - (overtimeErrors / 3.0)).clamp(0.0, 1.0),
-      "Process Optimization": (perfectDays / 3.0).clamp(0.0, 1.0),
+      "Planning & Prioritization": avgQuality,
+      "Constraint Management": constraintManagement,
+      "Risk Management": riskManagement,
+      "Decision Under Pressure": decisionUnderPressure,
     };
   }
+
 
   @override
   Widget build(BuildContext context) {

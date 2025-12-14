@@ -125,91 +125,104 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   }
 
   Map<String, double> grade() {
-    if (itemResults.isEmpty) {
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
+
+    if (itemResults.isEmpty || itemTimes.isEmpty || items.isEmpty) {
       return {
         "Inductive Reasoning": 0.0,
         "Deductive Reasoning": 0.0,
         "Quantitative Reasoning": 0.0,
-        "Abstract Thinking": 0.0,
-        "Pattern Recognition": 0.0,
         "Information Processing Speed": 0.0,
       };
     }
 
+    // Safety: only grade what we have evidence for (avoid index mismatch)
+    final int n = min(items.length, min(itemResults.length, itemTimes.length));
+    if (n <= 0) {
+      return {
+        "Inductive Reasoning": 0.0,
+        "Deductive Reasoning": 0.0,
+        "Quantitative Reasoning": 0.0,
+        "Information Processing Speed": 0.0,
+      };
+    }
+
+    // ---- Intermediate metrics (transparent) ----
     double totalDiff = 0.0;
     double correctWeighted = 0.0;
-    int correctCount = 0;
 
-    double inductiveSum = 0.0, inductiveMax = 0.0;
-    double deductiveSum = 0.0, deductiveMax = 0.0;
-    double quantSum = 0.0, quantMax = 0.0;
+    // Category buckets (NO overlap to avoid double-counting)
+    double inductiveSum = 0.0, inductiveMax = 0.0;   // Rotation, Cyclic Pattern
+    double deductiveSum = 0.0, deductiveMax = 0.0;   // Sudoku Logic, Column XOR
+    double quantSum = 0.0, quantMax = 0.0;           // Subtraction, Arithmetic
 
-    for (int i = 0; i < itemResults.length; i++) {
+    for (int i = 0; i < n; i++) {
       final item = items[i];
       final bool correct = itemResults[i];
+      final double w = item.difficulty.toDouble();
 
-      totalDiff += item.difficulty;
-      if (correct) {
-        correctWeighted += item.difficulty;
-        correctCount++;
-      }
+      totalDiff += w;
+      if (correct) correctWeighted += w;
 
       final desc = item.logicDescription;
 
-      // Inductive: infer the rule from examples
-      if (desc == "Rotation" || desc == "Cyclic Pattern" || desc == "Arithmetic") {
-        inductiveMax += item.difficulty;
-        if (correct) inductiveSum += item.difficulty;
+      // Inductive: infer rule from examples (non-numeric visual rule inference)
+      if (desc == "Rotation" || desc == "Cyclic Pattern") {
+        inductiveMax += w;
+        if (correct) inductiveSum += w;
       }
 
       // Deductive: apply strict constraints / rule logic
       if (desc == "Sudoku Logic (Unique Row/Col)" || desc == "Column XOR") {
-        deductiveMax += item.difficulty;
-        if (correct) deductiveSum += item.difficulty;
+        deductiveMax += w;
+        if (correct) deductiveSum += w;
       }
 
       // Quantitative: numeric operations / counts
       if (desc == "Subtraction" || desc == "Arithmetic") {
-        quantMax += item.difficulty;
-        if (correct) quantSum += item.difficulty;
+        quantMax += w;
+        if (correct) quantSum += w;
       }
     }
 
-    final double abstractThinking =
-    totalDiff == 0 ? 0.0 : (correctWeighted / totalDiff).clamp(0.0, 1.0);
+    final double overallWeightedAccuracy =
+    totalDiff <= 0.0 ? 0.0 : clamp01(correctWeighted / totalDiff);
 
     final double inductive =
-    inductiveMax == 0 ? 0.0 : (inductiveSum / inductiveMax).clamp(0.0, 1.0);
+    inductiveMax <= 0.0 ? 0.0 : clamp01(inductiveSum / inductiveMax);
 
     final double deductive =
-    deductiveMax == 0 ? 0.0 : (deductiveSum / deductiveMax).clamp(0.0, 1.0);
+    deductiveMax <= 0.0 ? 0.0 : clamp01(deductiveSum / deductiveMax);
 
     final double quantitative =
-    quantMax == 0 ? 0.0 : (quantSum / quantMax).clamp(0.0, 1.0);
+    quantMax <= 0.0 ? 0.0 : clamp01(quantSum / quantMax);
 
-    // Speed (earned)
-    final double avgTimeMs = itemTimes.isEmpty
-        ? 15000.0
-        : itemTimes.reduce((a, b) => a + b) / itemTimes.length;
+    // ---- Information Processing Speed (earned; gated by correctness) ----
+    // Use median time (robust) normalized by the round limit (15s = 15000ms).
+    // No extra magic constants.
+    double informationProcessingSpeed = 0.0;
+    {
+      final times = itemTimes.take(n).toList();
+      times.sort();
+      final int mid = times.length ~/ 2;
+      final double medianMs = times.length.isOdd
+          ? times[mid].toDouble()
+          : ((times[mid - 1] + times[mid]) / 2.0);
 
-    final double rawSpeed = (1.0 - (avgTimeMs / 15000.0)).clamp(0.0, 1.0);
+      final double rawSpeed = clamp01(1.0 - (medianMs / 15000.0));
 
-    // Gate speed by overall correctness (abstractThinking is your global weighted accuracy)
-    final double infoSpeed = (rawSpeed * abstractThinking).clamp(0.0, 1.0);
-
-    // Pattern recognition: accuracy-first + a small speed component (not gated to avoid double-counting)
-    final double rawAcc = items.isEmpty ? 0.0 : (correctCount / items.length).clamp(0.0, 1.0);
-    final double patternRecognition = (0.8 * rawAcc + 0.2 * rawSpeed).clamp(0.0, 1.0);
+      // Gate speed by discrimination quality (no fast-random guessing points)
+      informationProcessingSpeed = clamp01(rawSpeed * overallWeightedAccuracy);
+    }
 
     return {
       "Inductive Reasoning": inductive,
       "Deductive Reasoning": deductive,
       "Quantitative Reasoning": quantitative,
-      "Abstract Thinking": abstractThinking,
-      "Pattern Recognition": patternRecognition,
-      "Information Processing Speed": infoSpeed,
+      "Information Processing Speed": informationProcessingSpeed,
     };
   }
+
 
 
 

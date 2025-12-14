@@ -43,6 +43,25 @@ class _SplitTapGameState extends State<SplitTapGame> {
   int lastMathChange = 0;
   List<int> mathRTs = [];
 
+  // --- NEW: left-side trial accounting (tracking only) ---
+  bool _hasActiveLeftTrial = false;
+  bool _leftTrialWasTarget = false;
+  bool _leftTrialResponded = false;
+  bool _leftTrialIsPostSwitch = false;
+  int _leftTrialStartMs = 0;
+
+  int _leftTargets = 0;
+  int _leftDistractors = 0;
+  int _leftHitsT = 0;
+  int _leftMissesT = 0;
+  int _leftFalseAlarmTrials = 0;
+  int _leftCorrectRejections = 0;
+
+  final List<bool> _leftTrialCorrect = [];
+  final List<bool> _leftTrialPostSwitch = [];
+  final List<int> _leftHitRTs = []; // optional, not scored here
+
+
   final List<Map<String, dynamic>> colorPalette = [
     {"name": "GREEN", "color": Colors.green},
     {"name": "RED", "color": Colors.red},
@@ -78,8 +97,13 @@ class _SplitTapGameState extends State<SplitTapGame> {
   void _finishGame() {
     _gameTimer?.cancel();
     _leftSideTimer?.cancel();
+
+    // finalize the last left trial so it isn't dropped
+    _finalizeLeftTrial();
+
     setState(() => isGameOver = true);
   }
+
 
   // --- SYNCHRONIZED FLASH LOOP ---
   void _scheduleNextLeftColor() {
@@ -94,30 +118,26 @@ class _SplitTapGameState extends State<SplitTapGame> {
     if (isGameOver) return;
 
     setState(() {
-      // 1. Record Miss from PREVIOUS cycle (if valid)
-      // If the light was Target Color, and user didn't tap, it's a miss.
-      if (isTargetActive) {
-        leftMisses++;
-      }
+      // Finalize the previous flash as a completed trial
+      _finalizeLeftTrial();
 
-      // 2. CHECK RULE SWITCH
-      // Before showing the NEW color, check if we need to change the rule
+      // CHECK RULE SWITCH before showing the new flash
       flashesSeen++;
+      bool didSwitch = false;
       if (flashesSeen >= flashesUntilRuleChange) {
         _switchRule();
+        didSwitch = true;
         flashesSeen = 0;
-        flashesUntilRuleChange = 4 + rand.nextInt(4); // Reset counter (4-7)
+        flashesUntilRuleChange = 4 + rand.nextInt(4);
       }
 
-      // 3. Determine Next Stimulus
-      // 30% chance it matches the (possibly new) Target Rule
+      // Determine next stimulus (same as your logic)
       bool showTarget = rand.nextDouble() < 0.3;
 
       if (showTarget) {
         currentStimulusColor = targetColor;
         isTargetActive = true;
       } else {
-        // Distractor: Pick a color that is NOT the target
         var distractor = colorPalette[rand.nextInt(colorPalette.length)];
         while (distractor['color'] == targetColor) {
           distractor = colorPalette[rand.nextInt(colorPalette.length)];
@@ -125,11 +145,18 @@ class _SplitTapGameState extends State<SplitTapGame> {
         currentStimulusColor = distractor['color'];
         isTargetActive = false;
       }
+
+      // Start a new trial (tracking only)
+      _hasActiveLeftTrial = true;
+      _leftTrialWasTarget = showTarget;
+      _leftTrialResponded = false;
+      _leftTrialIsPostSwitch = didSwitch;
+      _leftTrialStartMs = DateTime.now().millisecondsSinceEpoch;
     });
 
-    // Schedule next
     _scheduleNextLeftColor();
   }
+
 
   void _switchRule() {
     // Pick a NEW target color
@@ -142,15 +169,58 @@ class _SplitTapGameState extends State<SplitTapGame> {
     // The UI banner updates immediately because we are inside setState()
   }
 
+  void _finalizeLeftTrial() {
+    if (!_hasActiveLeftTrial) return;
+
+    // Correctness for this trial (target: hit=correct, miss=wrong; distractor: no-tap=correct, tap=wrong)
+    bool correct;
+
+    if (_leftTrialWasTarget) {
+      _leftTargets++;
+      if (_leftTrialResponded) {
+        _leftHitsT++;
+        correct = true;
+      } else {
+        _leftMissesT++;
+        correct = false;
+      }
+    } else {
+      _leftDistractors++;
+      if (_leftTrialResponded) {
+        _leftFalseAlarmTrials++;
+        correct = false;
+      } else {
+        _leftCorrectRejections++;
+        correct = true;
+      }
+    }
+
+    _leftTrialCorrect.add(correct);
+    _leftTrialPostSwitch.add(_leftTrialIsPostSwitch);
+
+    _hasActiveLeftTrial = false;
+  }
+
   void _onLeftTap() {
     if (isGameOver) return;
 
     setState(() {
+      // tracking: mark that a response occurred on this flash (once)
+      if (_hasActiveLeftTrial && !_leftTrialResponded) {
+        _leftTrialResponded = true;
+
+        if (_leftTrialWasTarget) {
+          final rt = DateTime.now().millisecondsSinceEpoch - _leftTrialStartMs;
+          _leftHitRTs.add(rt);
+        }
+      }
+
+      // keep your original visible/game counters & feedback unchanged
       if (isTargetActive) {
         leftHits++;
         isTargetActive = false;
         HapticFeedback.mediumImpact();
-        currentStimulusColor = Colors.grey[300]!; // Feedback: Light off immediately
+        currentStimulusColor = Colors.grey[300]!;
       } else {
         HapticFeedback.heavyImpact();
         leftFalseAlarms++;
@@ -207,79 +277,124 @@ class _SplitTapGameState extends State<SplitTapGame> {
   }
 
   Map<String, double> grade() {
-    // ---------- LEFT TASK METRICS (Go/No-Go) ----------
-    final int leftTargets = leftHits + leftMisses;             // times target appeared
-    final int leftResponses = leftHits + leftFalseAlarms;      // taps made
-    final int leftTotalEvents = leftHits + leftMisses + leftFalseAlarms;
+    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
 
-    // Sensitivity (hit rate) and precision (tap correctness)
-    final double leftRecall = leftTargets == 0 ? 0.0 : (leftHits / leftTargets).clamp(0.0, 1.0);
-    final double leftPrecision = leftResponses == 0 ? 0.0 : (leftHits / leftResponses).clamp(0.0, 1.0);
+    // ---------- LEFT TASK (trial-based Go/No-Go) ----------
+    final int leftTotalTrials = _leftTargets + _leftDistractors;
+    if (leftTotalTrials <= 0) {
+      return {
+        "Response Inhibition": 0.0,
+        "Cognitive Flexibility": 0.0,
+        "Observation / Vigilance": 0.0,
+        "Quantitative Reasoning": 0.0,
+        "Reaction Time (Choice)": 0.0,
+      };
+    }
 
-    // Inhibition = resisting taps on non-targets (approximated via false alarms)
-    // We don't know true distractor count directly, so we approximate specificity using penalties.
-    final double inhibition = (1.0 - (leftFalseAlarms / max(1, leftFalseAlarms + leftHits))).clamp(0.0, 1.0);
+    final double hitRate = _leftTargets == 0 ? 0.0 : clamp01(_leftHitsT / _leftTargets);
+    final double specificity = _leftDistractors == 0 ? 0.0 : clamp01(_leftCorrectRejections / _leftDistractors);
+    final double leftBalancedAccuracy = (hitRate + specificity) / 2.0;
 
-    // Left performance: balanced (don’t reward conservative or spam tapping)
-    final double leftF1 = (leftPrecision + leftRecall) == 0
-        ? 0.0
-        : (2 * leftPrecision * leftRecall) / (leftPrecision + leftRecall);
+    // Response Inhibition: direct evidence = resisting taps on distractors (specificity)
+    // Reliability gate: need enough distractors to claim inhibition
+    final double inhibEvidence = clamp01(_leftDistractors / 8.0);
+    final double responseInhibition = clamp01(specificity * inhibEvidence);
 
-    // ---------- RIGHT TASK METRICS (Math) ----------
+    // Observation / Vigilance: stability over time (first half vs second half) gated by competence
+    double observationVigilance = 0.0;
+    {
+      final int n = _leftTrialCorrect.length;
+      if (n >= 10) {
+        final int split = n ~/ 2;
+
+        // Recompute BA per half using trial labels
+        int t1 = 0, d1 = 0, h1 = 0, cr1 = 0;
+        int t2 = 0, d2 = 0, h2 = 0, cr2 = 0;
+
+        // We need target/distractor labels per trial: infer from postSwitch list? no.
+        // Instead, use the aggregate counts with per-trial correctness only is not enough,
+        // so we conservatively approximate vigilance using correctness rate stability
+        // (still direct evidence: correct vs incorrect per trial).
+        int c1 = 0, c2 = 0;
+        for (int i = 0; i < n; i++) {
+          if (i < split) { if (_leftTrialCorrect[i]) c1++; }
+          else { if (_leftTrialCorrect[i]) c2++; }
+        }
+
+        final double acc1 = clamp01(c1 / (split == 0 ? 1 : split));
+        final double acc2 = clamp01(c2 / ((n - split) == 0 ? 1 : (n - split)));
+
+        final double stability = clamp01(1.0 - (acc1 - acc2).abs());
+        observationVigilance = clamp01(stability * leftBalancedAccuracy);
+      } else {
+        observationVigilance = 0.0;
+      }
+    }
+
+    // Cognitive Flexibility: direct switch-cost evidence (post-switch trials vs baseline)
+    double cognitiveFlexibility = 0.0;
+    {
+      int baseN = 0, baseC = 0;
+      int swN = 0, swC = 0;
+
+      for (int i = 0; i < _leftTrialCorrect.length; i++) {
+        final bool isSwitchTrial = _leftTrialPostSwitch[i];
+        final bool correct = _leftTrialCorrect[i];
+        if (isSwitchTrial) { swN++; if (correct) swC++; }
+        else { baseN++; if (correct) baseC++; }
+      }
+
+      // Need enough evidence in both sets
+      if (swN >= 2 && baseN >= 8) {
+        final double baseAcc = clamp01(baseC / baseN);
+        final double swAcc = clamp01(swC / swN);
+
+        // switch cost: how much performance drops after a rule change
+        final double cost = clamp01((baseAcc - swAcc) < 0 ? 0.0 : (baseAcc - swAcc));
+        cognitiveFlexibility = clamp01((1.0 - cost) * baseAcc);
+      } else {
+        cognitiveFlexibility = 0.0;
+      }
+    }
+
+    // ---------- RIGHT TASK (Math) ----------
     final int mathTotal = mathHits + mathWrongs;
-    final double mathAccuracy = mathTotal == 0 ? 0.0 : (mathHits / mathTotal).clamp(0.0, 1.0);
+    final double mathAccRaw = mathTotal == 0 ? 0.0 : clamp01(mathHits / mathTotal);
 
-    final double avgMathRt = mathRTs.isEmpty
-        ? 2000.0
-        : mathRTs.reduce((a, b) => a + b) / mathRTs.length;
+    // Reliability gate: 1 correct answer shouldn't max Quantitative Reasoning
+    final double mathEvidence = clamp01(mathTotal / 3.0);
+    final double quantitativeReasoning = clamp01(mathAccRaw * mathEvidence);
 
-    // Raw speed benchmark: 700ms = very fast, 2200ms = very slow
-    final double rawSpeed = (1.0 - ((avgMathRt - 700.0) / 1500.0)).clamp(0.0, 1.0);
+    // Reaction Time (Choice): median RT on answered math decisions, gated by accuracy + sample size
+    double reactionTimeChoice = 0.0;
+    {
+      if (mathRTs.length >= 5 && mathAccRaw > 0.0) {
+        final times = List<int>.from(mathRTs)..sort();
+        final int mid = times.length ~/ 2;
+        final double medianMs = times.length.isOdd
+            ? times[mid].toDouble()
+            : ((times[mid - 1] + times[mid]) / 2.0);
 
-    // Earned speed: fast only counts if you're correct
-    final double infoSpeed = (rawSpeed * mathAccuracy).clamp(0.0, 1.0);
+        // Scale using a defensible range for 3-option mental arithmetic selection
+        const double bestMs = 600.0;
+        const double worstMs = 4500.0;
+        final double raw = clamp01(1.0 - ((medianMs - bestMs) / (worstMs - bestMs)));
 
-    // ---------- DUAL-TASK LOAD (Working Memory) ----------
-    // Working memory here = doing both tasks well simultaneously:
-    // math accuracy + left accuracy (F1), plus slight penalty if either collapses.
-    final double workingMemory = (
-        0.55 * mathAccuracy +
-            0.45 * leftF1
-    ).clamp(0.0, 1.0);
-
-    // ---------- COGNITIVE FLEXIBILITY (Rule switching) ----------
-    // We don’t track per-switch performance directly, so we use a conservative proxy:
-    // If false alarms are high OR recall is low, it indicates difficulty adapting to rule changes.
-    // Penalize instability via false alarms + missed targets.
-    final double instability = (
-        (leftFalseAlarms / max(1, leftTotalEvents)) +
-            (leftMisses / max(1, leftTargets))
-    ).clamp(0.0, 1.0);
-
-    final double cognitiveFlexibility = (1.0 - instability).clamp(0.0, 1.0);
-
-    // ---------- RESPONSE INHIBITION ----------
-    // Directly from inhibition score (don’t tap on non-target)
-    final double responseInhibition = inhibition;
-
-    // ---------- QUANTITATIVE REASONING ----------
-    // Directly from math accuracy
-    final double quantitativeReasoning = mathAccuracy;
-
-    // ---------- DECISION UNDER PRESSURE ----------
-    // Overall quality under timer: accuracy-dominant, with small speed component
-    final double overallAccuracy = (0.5 * mathAccuracy + 0.5 * leftF1).clamp(0.0, 1.0);
-    final double decisionUnderPressure = (0.75 * overallAccuracy + 0.25 * rawSpeed).clamp(0.0, 1.0);
+        reactionTimeChoice = clamp01(raw * quantitativeReasoning);
+      } else {
+        reactionTimeChoice = 0.0;
+      }
+    }
 
     return {
-      "Working Memory": workingMemory,
-      "Cognitive Flexibility": cognitiveFlexibility,
       "Response Inhibition": responseInhibition,
+      "Cognitive Flexibility": cognitiveFlexibility,
+      "Observation / Vigilance": observationVigilance,
       "Quantitative Reasoning": quantitativeReasoning,
-      "Information Processing Speed": infoSpeed,
-      "Decision Under Pressure": decisionUnderPressure,
+      "Reaction Time (Choice)": reactionTimeChoice,
     };
   }
+
 
 
   @override
