@@ -57,6 +57,10 @@ class _SplitTapGameState extends State<SplitTapGame> {
   int _leftFalseAlarmTrials = 0;
   int _leftCorrectRejections = 0;
 
+  // --- Instruction Adherence tracking ---
+  int _postSwitchTrials = 0;
+  int _postSwitchCorrect = 0;
+
   final List<bool> _leftTrialCorrect = [];
   final List<bool> _leftTrialPostSwitch = [];
   final List<int> _leftHitRTs = []; // optional, not scored here
@@ -194,7 +198,12 @@ class _SplitTapGameState extends State<SplitTapGame> {
         correct = true;
       }
     }
-
+    if (_leftTrialIsPostSwitch) {
+      _postSwitchTrials++;
+      if (correct) {
+        _postSwitchCorrect++;
+      }
+    }
     _leftTrialCorrect.add(correct);
     _leftTrialPostSwitch.add(_leftTrialIsPostSwitch);
 
@@ -356,6 +365,19 @@ class _SplitTapGameState extends State<SplitTapGame> {
         cognitiveFlexibility = 0.0;
       }
     }
+    double instructionAdherence = 0.0;
+    {
+      if (_postSwitchTrials >= 3) {
+        final double adherenceRate = clamp01(_postSwitchCorrect / _postSwitchTrials);
+
+        // Reliability gate: need enough switches to claim adherence
+        final double evidenceGate = clamp01(_postSwitchTrials / 5.0);
+
+        instructionAdherence = clamp01(adherenceRate * evidenceGate);
+      } else {
+        instructionAdherence = 0.0;
+      }
+    }
 
     // ---------- RIGHT TASK (Math) ----------
     final int mathTotal = mathHits + mathWrongs;
@@ -389,6 +411,7 @@ class _SplitTapGameState extends State<SplitTapGame> {
     return {
       "Response Inhibition": responseInhibition,
       "Cognitive Flexibility": cognitiveFlexibility,
+      "Instruction Adherence": instructionAdherence,
       "Observation / Vigilance": observationVigilance,
       "Quantitative Reasoning": quantitativeReasoning,
       "Reaction Time (Choice)": reactionTimeChoice,
