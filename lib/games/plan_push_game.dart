@@ -265,12 +265,30 @@ class _PlanPushGameState extends State<PlanPushGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("14. Plan Push ($remainingSeconds)"),
+        title: const Text("14. Plan Push"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () {
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+              child: Text(
+                "${remainingSeconds}s",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                )
+              )
+            ),
+          ),
+          TextButton(onPressed: () {
            HapticFeedback.lightImpact();
            Navigator.of(context).pop(null);
-        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
+        ],
       ),
       body: Column(
         children: [

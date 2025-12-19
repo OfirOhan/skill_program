@@ -233,8 +233,8 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("9. 3D Spin (${index + 1}/${levels.length})"),
-        backgroundColor: Colors.white,
+        title: const Text("9. 3D Spin"),
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,
         elevation: 0,
         automaticallyImplyLeading: false,

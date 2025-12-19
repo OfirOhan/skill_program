@@ -314,6 +314,9 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
       appBar: AppBar(
         title: const Text("1. Blink & Match"),
         automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           TextButton(onPressed: () {
              HapticFeedback.lightImpact(); 

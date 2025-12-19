@@ -263,8 +263,11 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("2. Matrix Logic (${index + 1}/${items.length})"),
+        title: const Text("2. Matrix Logic"),
         automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),

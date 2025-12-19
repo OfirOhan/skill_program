@@ -32,22 +32,24 @@ class _GameIntroScreenState extends State<GameIntroScreen> {
 
     return Scaffold(
       backgroundColor: Colors.indigo[50],
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. TITLE
-              Text(
-                widget.title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo),
-              ),
-              const SizedBox(height: 20),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. TITLE (Restored)
+                  Text(
+                    widget.title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo),
+                  ),
+                  const SizedBox(height: 20),
 
-              // 2. INSTRUCTIONS (Moved Up)
+                  // 2. INSTRUCTIONS
               Card(
                 elevation: 2,
                 color: Colors.white,
@@ -119,6 +121,22 @@ class _GameIntroScreenState extends State<GameIntroScreen> {
           ),
         ),
       ),
-    );
+      // SKIP BUTTON OVERLAY
+      Positioned(
+        top: 0,
+        right: 0,
+        child: SafeArea(
+          child: Padding(
+             padding: const EdgeInsets.all(8.0),
+             child: TextButton(
+               onPressed: () => Navigator.of(context).pop(null),
+               child: const Text("SKIP", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+             ),
+          ),
+        ),
+      ),
+    ],
+  ),
+);
   }
 }

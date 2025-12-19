@@ -451,9 +451,26 @@ class _SplitTapGameState extends State<SplitTapGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("6. Split Tap ($remainingSeconds)"),
+        title: const Text("6. Split Tap"),
         automaticallyImplyLeading: false,
-        actions: [TextButton(onPressed: () {
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+              child: Text(
+                "${remainingSeconds.toInt()}s",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                )
+              )
+            ),
+          ),
+          TextButton(onPressed: () {
             HapticFeedback.lightImpact();
             Navigator.of(context).pop(null);
         }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],

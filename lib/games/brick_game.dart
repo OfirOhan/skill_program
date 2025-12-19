@@ -390,16 +390,29 @@ class _BrickGameState extends State<BrickGame> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("5. Object Brainstorm ($currentSeconds)"),
+        title: const Text("5. Object Brainstorm"),
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
-          TextButton(
-              onPressed: _onSkipPressed,
-              child: const Text("SKIP", style: TextStyle(color: Colors.redAccent))
-          )
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+              child: Text(
+                "${currentSeconds}s",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: currentSeconds <= 5 ? Colors.red : Colors.indigo
+                )
+              )
+            ),
+          ),
+          TextButton(onPressed: () {
+             HapticFeedback.lightImpact();
+             Navigator.of(context).pop(null);
+          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Padding(

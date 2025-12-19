@@ -255,9 +255,9 @@ class _StressSprintGameState extends State<StressSprintGame> with TickerProvider
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("15. Stress Sprint (Lvl $level)"),
+        title: const Text("15. Stress Sprint"),
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [

@@ -23,7 +23,7 @@ import 'games/plan_push_game.dart';
 import 'games/stress_sprint_game.dart';
 import 'games/signal_decode_game.dart';
 
-// --- DEMOS ---
+// --- IMPORT DEMOS ---
 import 'demos/blink_demo.dart';
 import 'demos/matrix_demo.dart';
 import 'demos/digit_demo.dart';
@@ -48,126 +48,148 @@ class SessionManager extends StatefulWidget {
 }
 
 class _SessionManagerState extends State<SessionManager> {
+  // -----------------------------
+  // SESSION STATE
+  // -----------------------------
   final Map<String, dynamic> sessionData = {
     "user_id": "guest_debug_01",
     "timestamp": DateTime.now().toIso8601String(),
-    "games": {}
+    "games": <String, dynamic>{},
   };
 
   int currentGameIndex = 0;
-  bool finished = false;
+  bool isTesting = true;
+  bool _isLaunching = false;
 
-  // --- GAME SEQUENCE ---
+  // -----------------------------
+  // GAME SEQUENCE
+  // -----------------------------
   final List<Widget> gameSequence = [
     const GameIntroScreen(
       title: "1. Blink & Match",
       icon: Icons.flash_on,
-      instruction: "Memorize the position and color.\nTap MATCH if the current item matches the one from 2 steps ago.",
+      instruction:
+      "Memorize the position and color.\nTap MATCH if the current item matches the one from 2 steps ago.",
       gameWidget: BlinkMatchWidget(),
       demoWidget: BlinkDemoWidget(),
     ),
     const GameIntroScreen(
       title: "2. Matrix Logic",
       icon: Icons.grid_on,
-      instruction: "Identify the pattern in the grid.",
+      instruction:
+      "Identify the pattern in the grid.\nSelect the missing piece.",
       gameWidget: MatrixSwipeWidget(),
       demoWidget: MatrixDemoWidget(),
     ),
     const GameIntroScreen(
       title: "3. Digit Shuffle",
       icon: Icons.onetwothree,
-      instruction: "Memorize the numbers shown.",
+      instruction:
+      "Memorize numbers.\nType them back in reverse or sorted order.",
       gameWidget: DigitShuffleWidget(),
       demoWidget: DigitShuffleDemoWidget(),
     ),
     const GameIntroScreen(
       title: "4. Logic Sprint",
       icon: Icons.lightbulb_outline,
-      instruction: "Solve logic puzzles.",
+      instruction:
+      "Solve logic analogies.\nThink fast.",
       gameWidget: WordLadderGame(),
       demoWidget: WordLadderDemoWidget(),
     ),
     const GameIntroScreen(
       title: "5. Object Brainstorm",
       icon: Icons.construction,
-      instruction: "Generate creative uses.",
+      instruction:
+      "Generate creative uses.\nChoose the best one.",
       gameWidget: BrickGame(),
       demoWidget: BrickDemoWidget(),
     ),
     const GameIntroScreen(
       title: "6. Split Tap",
       icon: Icons.splitscreen,
-      instruction: "Multitasking test.",
+      instruction:
+      "Multitask tapping + math.",
       gameWidget: SplitTapGame(),
       demoWidget: SplitTapDemoWidget(),
     ),
     const GameIntroScreen(
       title: "7. Pipe Flow",
       icon: Icons.water_drop,
-      instruction: "Connect the flow.",
+      instruction:
+      "Rotate pipes to connect flow.",
       gameWidget: LogicBlocksGame(),
       demoWidget: LogicBlocksDemoWidget(),
     ),
     const GameIntroScreen(
       title: "8. Chart Dash",
       icon: Icons.bar_chart,
-      instruction: "Analyze charts.",
+      instruction:
+      "Analyze chart trends.",
       gameWidget: ChartDashGame(),
       demoWidget: ChartDashDemoWidget(),
     ),
     const GameIntroScreen(
       title: "9. 3D Spin",
       icon: Icons.view_in_ar,
-      instruction: "Match the 3D object.",
+      instruction:
+      "Match rotating 3D shapes.",
       gameWidget: SpinGame(),
       demoWidget: SpinDemoWidget(),
     ),
     const GameIntroScreen(
       title: "10. Precision Path",
       icon: Icons.fingerprint,
-      instruction: "Trace carefully.",
+      instruction:
+      "Trace carefully.\nDo not touch walls.",
       gameWidget: PrecisionGame(),
       demoWidget: PrecisionDemoWidget(),
     ),
     const GameIntroScreen(
       title: "11. Color Cascade",
       icon: Icons.palette,
-      instruction: "Color perception.",
+      instruction:
+      "Color sorting and odd-one-out.",
       gameWidget: ColorCascadeGame(),
       demoWidget: ColorCascadeDemoWidget(),
     ),
     const GameIntroScreen(
       title: "12. Beat Buddy",
       icon: Icons.music_note,
-      instruction: "Rhythm tapping.",
+      instruction:
+      "Tap in rhythm.",
       gameWidget: BeatBuddyGame(),
       demoWidget: BeatBuddyDemoWidget(),
     ),
     const GameIntroScreen(
       title: "13. Social Signal",
       icon: Icons.psychology,
-      instruction: "Interpret social intent.",
+      instruction:
+      "Infer social meaning.",
       gameWidget: RoleplayGame(),
       demoWidget: RoleplayDemoWidget(),
     ),
     const GameIntroScreen(
       title: "14. Plan Push",
       icon: Icons.calendar_month,
-      instruction: "Optimize planning.",
+      instruction:
+      "Optimize schedule.",
       gameWidget: PlanPushGame(),
       demoWidget: PlanPushDemoWidget(),
     ),
     const GameIntroScreen(
       title: "15. Stress Sprint",
       icon: Icons.timer_off,
-      instruction: "Fast math under stress.",
+      instruction:
+      "Math under pressure.",
       gameWidget: StressSprintGame(),
       demoWidget: StressSprintDemoWidget(),
     ),
     const GameIntroScreen(
       title: "16. Signal Decode",
       icon: Icons.radar,
-      instruction: "Decode multi-modal signals.",
+      instruction:
+      "Decode signals under time pressure.",
       gameWidget: SignalDecodeGame(),
       demoWidget: Placeholder(),
     ),
@@ -192,78 +214,116 @@ class _SessionManagerState extends State<SessionManager> {
     "signal_decode",
   ];
 
+  // -----------------------------
+  // LIFECYCLE
+  // -----------------------------
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runAssessment());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _launchCurrentGame();
+    });
   }
 
-  Future<void> _runAssessment() async {
-    for (int i = 0; i < gameSequence.length && mounted; i++) {
+  // -----------------------------
+  // GAME FLOW
+  // -----------------------------
+  Future<void> _launchCurrentGame() async {
+    if (_isLaunching) return;
+    _isLaunching = true;
+
+    while (mounted && currentGameIndex < gameSequence.length) {
       final result = await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => gameSequence[i]),
+        MaterialPageRoute(
+          builder: (_) => gameSequence[currentGameIndex],
+        ),
       );
-      sessionData["games"][gameIds[i]] = result ?? "SKIPPED";
+
+      sessionData['games'][gameIds[currentGameIndex]] =
+          result ?? "SKIPPED";
+
+      currentGameIndex++;
     }
 
-    _finalize();
+    _isLaunching = false;
+    if (!mounted) return;
+    _finishAssessment();
   }
 
-  void _finalize() {
-    final direct = SkillAggregator.aggregate(sessionData["games"]);
-    final derived = DerivedSkillEngine.derive(direct);
+  // -----------------------------
+  // FINALIZATION (FIXED)
+  // -----------------------------
+  void _finishAssessment() {
+    if (!mounted) return;
 
-    sessionData["final_skills"] = {
-      ...direct,
-      ...derived,
+    Map<String, double?> directSkills = {};
+    Map<String, double?> derivedSkills = {};
+
+    try {
+      directSkills = SkillAggregator.aggregate(
+        (sessionData['games'] as Map).cast<String, dynamic>(),
+      );
+    } catch (e) {
+      sessionData['aggregation_error'] = e.toString();
+    }
+
+    try {
+      final Map<String, double> nonNullDirect = {};
+      directSkills.forEach((k, v) {
+        if (v != null) nonNullDirect[k] = v;
+      });
+
+      derivedSkills = DerivedSkillEngine.derive(nonNullDirect);
+    } catch (e) {
+      sessionData['derivation_error'] = e.toString();
+    }
+
+    final Map<String, double?> finalSkills = {
+      ...derivedSkills,
     };
 
-    setState(() {
-      finished = true;
+    directSkills.forEach((k, v) {
+      if (v != null) finalSkills[k] = v;
     });
 
-    print("\n===== ASSESSMENT COMPLETE =====");
-    print(const JsonEncoder.withIndent("  ").convert(sessionData));
+    sessionData['final_skills'] = finalSkills;
+
+    setState(() {
+      isTesting = false;
+    });
+
+    debugPrint(
+      const JsonEncoder.withIndent('  ').convert(sessionData),
+    );
   }
 
+  // -----------------------------
+  // UI
+  // -----------------------------
   @override
   Widget build(BuildContext context) {
-    if (!finished) {
-      // IMPORTANT: do NOT block navigation with a spinner
+    if (isTesting) {
       return const Scaffold(
         body: Center(
           child: Text(
-            "Assessment in progress…",
+            "Assessment in progress...",
             style: TextStyle(color: Colors.grey),
           ),
         ),
       );
     }
 
-    // FINAL RESULTS SCREEN
     return Scaffold(
       appBar: AppBar(title: const Text("Session Results")),
       body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const Icon(Icons.psychology_alt, size: 80, color: Colors.indigo),
-            const SizedBox(height: 20),
-            const Text(
-              "Assessment Complete!",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Text(
-                  const JsonEncoder.withIndent("  ").convert(sessionData),
-                  style: const TextStyle(fontFamily: "Courier", fontSize: 11),
-                ),
-              ),
-            ),
-          ],
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Text(
+            const JsonEncoder.withIndent('  ')
+                .convert(sessionData),
+            style: const TextStyle(fontFamily: 'Courier'),
+          ),
         ),
       ),
     );

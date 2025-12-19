@@ -220,9 +220,25 @@ class _RoleplayGameState extends State<RoleplayGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("13. Read the Room ($remainingSeconds)"),
+        title: const Text("13. Read the Room"),
         automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+              child: Text(
+                "${remainingSeconds}s",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                )
+              )
+            ),
+          ),
           TextButton(onPressed: () { 
              HapticFeedback.lightImpact();
              Navigator.of(context).pop(null);

@@ -365,9 +365,9 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("7. Pipe Flow (${currentLevelIndex + 1}/$totalLevels)"),
+        title: const Text("7. Pipe Flow"),
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [

@@ -211,8 +211,11 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("4. Logic Sprint (${index + 1}/${items.length})"),
+        title: const Text("4. Logic Sprint"),
         automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -222,7 +225,7 @@ class _WordLadderGameState extends State<WordLadderGame> {
                     style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 3 ? Colors.red : Colors.orange[800]
+                        color: remainingSeconds <= 3 ? Colors.red : Colors.indigo
                     )
                 )
             ),

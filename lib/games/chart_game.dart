@@ -243,8 +243,11 @@ class _ChartDashGameState extends State<ChartDashGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("8. Chart Dash (${index + 1}/${questions.length})"),
+        title: const Text("8. Chart Dash"),
         automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
