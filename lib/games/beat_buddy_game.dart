@@ -68,11 +68,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
   List<bool> _answerDeck = [];
   bool _currentCorrectAnswer = true;
 
-  // Feedback State
-  bool? _lastChosenSame;
-  bool? _lastAnswerCorrect;
-
-  // Score
+  // Score (Silent Tracking)
   int _rhythmCorrect = 0;
   int _rhythmTotal = 0;
 
@@ -285,12 +281,9 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
     final int sign = rand.nextBool() ? 1 : -1;
 
     int changed = b[idx] + sign * deltaMs;
-    // Keep reasonable tempo
     changed = changed.clamp(250, 900);
-    // Snap to grid
     changed = (changed / 50).round() * 50;
 
-    // Safety check: if change failed (e.g. clamp hit), force a shift
     if (changed == b[idx]) changed = (changed + 50).clamp(250, 900);
 
     b[idx] = changed;
@@ -300,11 +293,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
   void _startRhythmTrial() {
     _roundTimer?.cancel();
 
-    // Reset visual feedback
-    _lastChosenSame = null;
-    _lastAnswerCorrect = null;
-
-    // --- DIFFICULTY ---
     final int beats = _getBeatsForRound(_trial);
     final int delta = _getDeltaForRound(_trial);
 
@@ -374,13 +362,13 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
     setState(() {
       _isTransitioning = true;
       _awaitingAnswer = false;
-      _lastChosenSame = isSameChosen;
-      _lastAnswerCorrect = correct;
     });
 
-    if (hadAnswer) HapticFeedback.lightImpact(); else HapticFeedback.mediumImpact();
+    // SILENT MODE: No Red/Green flash. Just a neutral feedback click.
+    if (hadAnswer) HapticFeedback.lightImpact();
 
-    Future.delayed(const Duration(milliseconds: 800), () {
+    // Quick transition
+    Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       if (_trial < _maxTrials - 1) {
         setState(() { _trial++; });
@@ -530,7 +518,8 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
             height: 55,
             child: ElevatedButton(
               onPressed: _submitPitch,
-              style: ElevatedButton.styleFrom(backgroundColor: colPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              // UPDATED: Use colPrimary for submit button
+              style: ElevatedButton.styleFrom(backgroundColor: colPrimary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: const Text("SUBMIT", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ),
@@ -543,22 +532,14 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
   Widget _buildRhythmDiscriminationUI() {
     final double progress = (_trial + 1) / _maxTrials;
 
-    // Determine button colors based on feedback
+    // Default neutral colors (Silent Mode)
     Color sameBtnColor = colPrimary;
     Color diffBtnColor = Colors.deepOrange;
 
+    // Disable buttons during transition, but don't change color to reveal answer
     if (_isTransitioning) {
-      if (_lastChosenSame == true) {
-        sameBtnColor = (_lastAnswerCorrect == true) ? Colors.green : Colors.red;
-        diffBtnColor = Colors.grey.shade300;
-      } else if (_lastChosenSame == false) {
-        diffBtnColor = (_lastAnswerCorrect == true) ? Colors.green : Colors.red;
-        sameBtnColor = Colors.grey.shade300;
-      } else {
-        // Timeout
-        sameBtnColor = Colors.grey;
-        diffBtnColor = Colors.grey;
-      }
+      sameBtnColor = Colors.grey.shade400;
+      diffBtnColor = Colors.grey.shade400;
     }
 
     return SingleChildScrollView(
@@ -605,14 +586,13 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
           const SizedBox(height: 35),
           const SizedBox(height: 24),
 
-          // Answer Buttons
+          // Answer Buttons (Silent Mode: No color change on press)
           Row(
             children: [
               Expanded(
                   child: _AnswerButton(
                       label: "SAME",
-                      // Enabled if awaiting answer OR if we are showing feedback for THIS button
-                      enabled: _awaitingAnswer || (_isTransitioning && _lastChosenSame == true),
+                      enabled: !_isTransitioning && _awaitingAnswer,
                       color: sameBtnColor,
                       onTap: () => _registerRhythmAnswer(isSameChosen: true)
                   )
@@ -621,7 +601,7 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
               Expanded(
                   child: _AnswerButton(
                       label: "DIFFERENT",
-                      enabled: _awaitingAnswer || (_isTransitioning && _lastChosenSame == false),
+                      enabled: !_isTransitioning && _awaitingAnswer,
                       color: diffBtnColor,
                       onTap: () => _registerRhythmAnswer(isSameChosen: false)
                   )
@@ -635,7 +615,6 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
           Text("Level: ${_trial < 2 ? "EASY" : (_trial < 4 ? "MEDIUM" : "HARD")}", style: TextStyle(color: colPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
 
           const SizedBox(height: 18),
-          // REMOVED START BUTTON - Auto flow only
         ],
       ),
     );

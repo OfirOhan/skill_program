@@ -1,5 +1,6 @@
 // lib/demos/beat_buddy_demo.dart
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 class BeatBuddyDemoWidget extends StatefulWidget {
@@ -9,93 +10,152 @@ class BeatBuddyDemoWidget extends StatefulWidget {
   _BeatBuddyDemoWidgetState createState() => _BeatBuddyDemoWidgetState();
 }
 
-class _BeatBuddyDemoWidgetState extends State<BeatBuddyDemoWidget> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _BeatBuddyDemoWidgetState extends State<BeatBuddyDemoWidget> with TickerProviderStateMixin {
+  // --- THEME ---
+  final Color colPrimary = const Color(0xFF3F51B5);
+  final Color colAccent = const Color(0xFF00E5FF);
+  final Color colDarkDisplay = const Color(0xFF1E1E2C);
 
-  // Visual State
-  bool showTapIndicator = false;
-  String feedbackText = "";
-  Color feedbackColor = Colors.transparent;
-  double feedbackOpacity = 0.0;
+  // --- STATE ---
+  int _demoPhase = 0; // 0 = Pitch, 1 = Rhythm
+
+  // Pitch State
+  bool _targetPlaying = false;
+  bool _userPlaying = false;
+  double _sliderValue = 0.3; // 0.0 to 1.0
+
+  // Rhythm State
+  String _rhythmLabel = "LISTEN...";
+  bool _isPulsing = false;
+  bool _highlightDifferent = false; // To simulate selection
+
+  // Visual Feedback
+  String _feedbackText = "";
+  Color _feedbackColor = Colors.transparent;
+  double _feedbackOpacity = 0.0;
+
+  // Tap Simulation
+  Offset _tapPosition = Offset.zero;
+  bool _showTap = false;
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    // Simulate ~60 BPM (1 second per beat)
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat();
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 150));
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeOutQuad),
+    );
 
     _startDemoLoop();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
   void _startDemoLoop() async {
     while (mounted) {
-      // --- BEAT 1: PERFECT ---
-      // Reset Feedback
-      if (mounted) setState(() => feedbackOpacity = 0.0);
+      // ==========================
+      // PHASE 1: PITCH MATCHING
+      // ==========================
+      if (mounted) setState(() {
+        _demoPhase = 0;
+        _sliderValue = 0.2; // Start wrong
+        _feedbackOpacity = 0.0;
+        _targetPlaying = false;
+        _userPlaying = false;
+      });
 
-      // Wait for ring to be near center (approx 900ms)
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
+      // 1. Play Target
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) setState(() => _targetPlaying = true);
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) setState(() => _targetPlaying = false);
 
-      // Tap + Feedback
-      _triggerTap();
-      _showFeedback("PERFECT", Colors.green);
+      // 2. Play User & Move Slider
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) setState(() => _userPlaying = true);
 
-      // Wait for next beat alignment
-      await Future.delayed(const Duration(milliseconds: 1100));
-      if (!mounted) return;
+      // Animate Slider to "Correct" spot (approx 0.7)
+      const int steps = 20;
+      for(int i=0; i<steps; i++) {
+        await Future.delayed(const Duration(milliseconds: 40));
+        if (mounted) setState(() => _sliderValue += (0.5 / steps)); // Move from 0.2 to 0.7
+      }
 
-      // --- BEAT 2: LATE ---
-      if (mounted) setState(() => feedbackOpacity = 0.0);
+      if (mounted) setState(() => _userPlaying = false);
 
-      // Wait past center (1000ms + 250ms late)
-      await Future.delayed(const Duration(milliseconds: 250));
-      if (!mounted) return;
+      // 3. Submit
+      await Future.delayed(const Duration(milliseconds: 500));
+      _simulateTap(const Offset(0, 150)); // Visual tap on button
+      _showFeedback("PITCH MATCHED!", Colors.green);
 
-      _triggerTap();
-      _showFeedback("LATE", Colors.orange);
-
-      await Future.delayed(const Duration(milliseconds: 1750));
-      if (!mounted) return;
-
-      // --- BEAT 3: PERFECT AGAIN ---
-      if (mounted) setState(() => feedbackOpacity = 0.0);
-
-      _triggerTap();
-      _showFeedback("PERFECT", Colors.green);
-
-      // Hold before loop restart
       await Future.delayed(const Duration(milliseconds: 2000));
+
+      // ==========================
+      // PHASE 2: RHYTHM CHECK
+      // ==========================
+      if (mounted) setState(() {
+        _demoPhase = 1;
+        _feedbackOpacity = 0.0;
+        _rhythmLabel = "GET READY...";
+        _highlightDifferent = false;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      // 1. Play Pattern A
+      if (mounted) setState(() => _rhythmLabel = "PATTERN A");
+      await _visualPulse(3); // Pulse 3 times
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 2. Play Pattern B
+      if (mounted) setState(() => _rhythmLabel = "PATTERN B");
+      await _visualPulse(3); // Pulse 3 times
+
+      // 3. Select Answer
+      if (mounted) setState(() => _rhythmLabel = "SAME or DIFFERENT?");
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      _simulateTap(const Offset(60, 120)); // Tap "Different"
+      if (mounted) setState(() => _highlightDifferent = true);
+      _showFeedback("CORRECT!", Colors.green);
+
+      await Future.delayed(const Duration(milliseconds: 2500));
     }
   }
 
-  // Helper: Flashes the finger icon briefly (like a real tap)
-  void _triggerTap() {
-    if (!mounted) return;
-    setState(() => showTapIndicator = true);
+  Future<void> _visualPulse(int count) async {
+    for (int i=0; i<count; i++) {
+      if (!mounted) return;
+      _pulseController.forward(from: 0.0);
+      await Future.delayed(const Duration(milliseconds: 400));
+    }
+  }
 
-    // Hide finger after 150ms (quick tap)
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) setState(() => showTapIndicator = false);
+  void _simulateTap(Offset relativeOffset) {
+    if (!mounted) return;
+    setState(() {
+      _tapPosition = relativeOffset;
+      _showTap = true;
+    });
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) setState(() => _showTap = false);
     });
   }
 
-  // Helper: Shows the text badge
   void _showFeedback(String text, Color color) {
     if (!mounted) return;
     setState(() {
-      feedbackText = text;
-      feedbackColor = color;
-      feedbackOpacity = 1.0;
+      _feedbackText = text;
+      _feedbackColor = color;
+      _feedbackOpacity = 1.0;
     });
   }
 
@@ -105,105 +165,186 @@ class _BeatBuddyDemoWidgetState extends State<BeatBuddyDemoWidget> with SingleTi
       width: 300,
       height: 400,
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.black12),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
-          ]
+        color: const Color(0xFFF0F2F5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black12),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // 1. Header Instructions
-          const Positioned(
-            top: 24,
-            child: Text(
-                "Tap when the Ring hits Center",
-                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14)
-            ),
+          // CONTENT SWITCHER
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: _demoPhase == 0 ? _buildPitchDemo() : _buildRhythmDemo(),
           ),
 
-          // 2. Animated Beat Visualizer
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              double progress = _controller.value;
-              double ringSize = 90 + (160 * (1.0 - progress)); // Demo Scale
-
-              bool onBeat = progress > 0.9 || progress < 0.1;
-              double centerSize = onBeat ? 100 : 90;
-              Color centerColor = onBeat ? Colors.indigo : Colors.grey[300]!;
-
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Target Zone
-                  Container(
-                    width: centerSize, height: centerSize,
-                    decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey[100],
-                        border: Border.all(
-                            color: centerColor,
-                            width: onBeat ? 6 : 4
-                        ),
-                        boxShadow: [
-                          if (onBeat)
-                            BoxShadow(color: Colors.indigo.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
-                        ]
-                    ),
-                  ),
-
-                  // Shrinking Ring
-                  Container(
-                    width: ringSize, height: ringSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.indigoAccent, width: 4),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-
-          // 3. Feedback Badge (Below)
-          Transform.translate(
-            offset: const Offset(0, 100),
+          // FEEDBACK OVERLAY
+          Positioned(
+            top: 40,
             child: AnimatedOpacity(
-              opacity: feedbackOpacity,
-              duration: const Duration(milliseconds: 100),
+              opacity: _feedbackOpacity,
+              duration: const Duration(milliseconds: 200),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                    color: feedbackColor,
+                    color: _feedbackColor,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(color: feedbackColor.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 2))
-                    ]
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)]
                 ),
                 child: Text(
-                    feedbackText,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)
+                  _feedbackText,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
             ),
           ),
 
-          // 4. Simulated Finger Tap (Visual Indicator)
-          // Renders ON TOP of everything else
-          if (showTapIndicator)
-            Container(
-              width: 60, height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withOpacity(0.1),
+          // TAP INDICATOR (Simulated Finger)
+          if (_showTap)
+            Transform.translate(
+              offset: _tapPosition,
+              child: Container(
+                width: 50, height: 50,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withOpacity(0.1),
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 2)
+                ),
+                child: const Icon(Icons.touch_app, color: Colors.indigo, size: 30),
               ),
-              child: const Icon(Icons.touch_app, color: Colors.indigo, size: 40),
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPitchDemo() {
+    return Column(
+      key: const ValueKey("PITCH"),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text("PART 1: PITCH", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+
+        // Target Box
+        Container(
+          width: 240, padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: colDarkDisplay, borderRadius: BorderRadius.circular(12)),
+          child: Row(
+            children: [
+              _miniPlayBtn(colAccent, _targetPlaying),
+              const SizedBox(width: 10),
+              const Text("TARGET", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
+              if (_targetPlaying) ...[
+                const SizedBox(width: 10),
+                const Icon(Icons.graphic_eq, color: Colors.white, size: 16)
+              ]
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // User Box
+        Container(
+          width: 240, padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _miniPlayBtn(colPrimary, _userPlaying),
+                  const SizedBox(width: 10),
+                  const Text("YOUR TONE", style: TextStyle(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Fake Slider
+              SizedBox(
+                height: 20,
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    Container(height: 4, color: Colors.indigo.shade100),
+                    AnimatedAlign(
+                      duration: const Duration(milliseconds: 50),
+                      alignment: Alignment(_sliderValue * 2 - 1, 0), // Map 0..1 to -1..1
+                      child: Container(
+                        width: 16, height: 16,
+                        decoration: const BoxDecoration(color: Colors.indigo, shape: BoxShape.circle),
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Submit Button
+        Container(
+          width: 240, height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: colPrimary, borderRadius: BorderRadius.circular(8)),
+          child: const Text("SUBMIT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        )
+      ],
+    );
+  }
+
+  Widget _buildRhythmDemo() {
+    return Column(
+      key: const ValueKey("RHYTHM"),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text("PART 2: RHYTHM", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+
+        // Pulsing Orb
+        ScaleTransition(
+          scale: _pulseAnimation,
+          child: Container(
+            width: 100, height: 100,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [colAccent.withOpacity(0.8), Colors.cyan.shade200]),
+                boxShadow: [BoxShadow(color: colAccent.withOpacity(0.4), blurRadius: 20)]
+            ),
+            alignment: Alignment.center,
+            child: Text(_rhythmLabel, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+        ),
+
+        const SizedBox(height: 40),
+
+        // Buttons
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _miniBtn("SAME", Colors.grey.shade300),
+            const SizedBox(width: 10),
+            _miniBtn("DIFFERENT", _highlightDifferent ? Colors.deepOrange : Colors.deepOrange.withOpacity(0.3)),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _miniPlayBtn(Color color, bool active) {
+    return Container(
+      width: 30, height: 30,
+      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: active ? color : Colors.grey, width: 2)),
+      child: Icon(active ? Icons.volume_up : Icons.play_arrow, size: 16, color: active ? color : Colors.grey),
+    );
+  }
+
+  Widget _miniBtn(String label, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
     );
   }
 }

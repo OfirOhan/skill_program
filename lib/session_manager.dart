@@ -20,7 +20,7 @@ import 'games/color_cascade_game.dart';
 import 'games/beat_buddy_game.dart';
 import 'games/roleplay_game.dart';
 import 'games/plan_push_game.dart';
-import 'games/stress_sprint_game.dart';
+import 'games/word_group_game.dart';
 import 'games/signal_decode_game.dart';
 
 // --- IMPORT DEMOS ---
@@ -38,7 +38,7 @@ import 'demos/color_cascade_demo.dart';
 import 'demos/beat_buddy_demo.dart';
 import 'demos/roleplay_demo.dart';
 import 'demos/plan_push_demo.dart';
-import 'demos/stress_split_demo.dart';
+import 'demos/word_group_demo.dart';
 
 class SessionManager extends StatefulWidget {
   const SessionManager({Key? key}) : super(key: key);
@@ -182,8 +182,8 @@ class _SessionManagerState extends State<SessionManager> {
       icon: Icons.timer_off,
       instruction:
       "Math under pressure.",
-      gameWidget: StressSprintGame(),
-      demoWidget: StressSprintDemoWidget(),
+      gameWidget: WordGroupsGame(),
+      demoWidget: WordGroupsDemoWidget(),
     ),
     const GameIntroScreen(
       title: "16. Signal Decode",
@@ -210,7 +210,7 @@ class _SessionManagerState extends State<SessionManager> {
     "beat_buddy",
     "social_signal",
     "plan_push",
-    "stress_sprint",
+    "word_group",
     "signal_decode",
   ];
 
