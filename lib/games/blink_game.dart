@@ -255,7 +255,7 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
     final double falseAlarmRate = nFalseAlarms / distractors;
     final double balancedAcc = (hitRate + specificity) / 2.0;
 
-    final double workingMemory = clamp01(hitRate * specificity);
+    final double workingMemory = clamp01(hitRate * sqrt(specificity));
     final double responseInhibition = clamp01(1.0 - falseAlarmRate);
 
     final int engagement = nHits + nFalseAlarms;
@@ -280,7 +280,13 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
       if (t1 > 0 && d1 > 0 && t2 > 0 && d2 > 0) {
         final double ba1 = ((h1 / t1) + (cr1 / d1)) / 2.0;
         final double ba2 = ((h2 / t2) + (cr2 / d2)) / 2.0;
-        observationVigilance = clamp01(clamp01(1.0 - (ba1 - ba2).abs()) * balancedAcc);
+        final diff = (ba1 - ba2).abs();
+
+        // [FIX] Squaring the difference makes the metric tolerant of small
+        // variance (1 error) while still punishing large fatigue drops.
+        final stability = clamp01(1.0 - (diff * diff * 3.0));
+
+        final observationVigilance = clamp01(stability * balancedAcc);
       }
     }
 
