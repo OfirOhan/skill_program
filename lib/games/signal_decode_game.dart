@@ -332,16 +332,16 @@ class _SignalDecodeGameState extends State<SignalDecodeGame> {
       appBar: AppBar(
         title: const Text("Signal Decode"),
         backgroundColor: Colors.transparent,
-        foregroundColor: colText,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
         centerTitle: true,
-      actions: [
+        actions: [
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 20),
               child: Text(
                 "${_roundSecLeft}s",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _roundSecLeft < 3 ? Colors.red : colPrimary),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _roundSecLeft < 3 ? Colors.red : colPrimary),
               ),
             ),
           ),

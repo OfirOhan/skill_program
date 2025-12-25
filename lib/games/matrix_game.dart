@@ -263,29 +263,25 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("2. Matrix Logic"),
-        automaticallyImplyLeading: false,
+        title: const Text("Matrix Logic"),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
+        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
-                child: Text(
-                    "${remainingSeconds}s",
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                    )
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20.0),
+              child: Text(
+                "$remainingSeconds s",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
                 )
+              ),
             ),
           ),
-          TextButton(onPressed: () { 
-              HapticFeedback.lightImpact();
-              Navigator.of(context).pop(null);
-          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(

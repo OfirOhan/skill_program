@@ -451,29 +451,26 @@ class _SplitTapGameState extends State<SplitTapGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("6. Split Tap"),
-        automaticallyImplyLeading: false,
+        title: const Text("Split Tap"),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
+        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "${remainingSeconds.toInt()}s",
+                "${remainingSeconds.toInt()} s",
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
                 )
-              )
+              ),
             ),
           ),
-          TextButton(onPressed: () {
-            HapticFeedback.lightImpact();
-            Navigator.of(context).pop(null);
-        }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))],
+        ],
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch, // MAXIMIZE TOUCH AREA

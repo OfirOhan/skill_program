@@ -365,26 +365,25 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("7. Pipe Flow"),
-        automaticallyImplyLeading: false,
+        title: const Text("Pipe Flow"),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
+        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
-                child: Text(
-                    "${remainingSeconds}s",
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                    )
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20.0),
+              child: Text(
+                "$remainingSeconds s",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
                 )
+              ),
             ),
           ),
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Column(

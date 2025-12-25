@@ -270,32 +270,25 @@ class _SemanticSieveGameState extends State<WordGroupsGame> {
     return Scaffold(
       backgroundColor: colBackground,
       appBar: AppBar(
-        title: const Text("18. Semantic Sieve"),
+        title: const Text("Semantic Sieve"),
         backgroundColor: Colors.transparent,
         foregroundColor: colText,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                  "${_currentRoundSeconds}s", // UPDATED: Per round timer
+                  "$_currentRoundSeconds s",
                   style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: _currentRoundSeconds <= 3 ? Colors.red : colPrimary
                   )
               ),
             ),
           ),
-          TextButton(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                Navigator.of(context).pop(null);
-              },
-              child: const Text("SKIP", style: TextStyle(color: Colors.redAccent))
-          )
         ],
       ),
       body: SafeArea(

@@ -300,21 +300,22 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("3. Digit Shuffle"),
-        automaticallyImplyLeading: false,
+        title: const Text("Digit Shuffle"),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
+        centerTitle: true,
         actions: [
           if (!isMemorizing)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Center(child: Text("${roundSeconds}s", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: roundSeconds <= 5 ? Colors.red : Colors.indigo))),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 20.0),
+                child: Text(
+                  "$roundSeconds s", // Assuming roundSeconds is the var
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: roundSeconds <= 5 ? Colors.red : Colors.indigo)
+                ),
+              ),
             ),
-          TextButton(onPressed: () {
-            HapticFeedback.lightImpact();
-            Navigator.of(context).pop(null);
-          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Column(

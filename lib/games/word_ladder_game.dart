@@ -211,29 +211,25 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("4. Logic Sprint"),
-        automaticallyImplyLeading: false,
+        title: const Text("Logic Sprint"),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
+        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
-                child: Text(
-                    "${remainingSeconds}s",
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: remainingSeconds <= 3 ? Colors.red : Colors.indigo
-                    )
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20.0),
+              child: Text(
+                "$remainingSeconds s",
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: remainingSeconds <= 3 ? Colors.red : Colors.indigo
                 )
+              ),
             ),
           ),
-          TextButton(onPressed: () {
-             HapticFeedback.lightImpact();
-             Navigator.of(context).pop(null);
-          }, child: const Text("SKIP", style: TextStyle(color: Colors.redAccent)))
         ],
       ),
       body: Stack(
@@ -345,7 +341,7 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
   Widget _buildResultsScreen() {
     return Scaffold(
-      appBar: AppBar(title: const Text("4. Logic Sprint"), automaticallyImplyLeading: false),
+      appBar: AppBar(title: const Text("Logic Sprint"), automaticallyImplyLeading: false),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
