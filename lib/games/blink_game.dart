@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../grading/blink_grading.dart';
 
 class BlinkMatchWidget extends StatefulWidget {
   final int nBack;
@@ -224,101 +225,34 @@ class _BlinkMatchWidgetState extends State<BlinkMatchWidget> {
     });
   }
 
-  // --- GRADING (With your fix included) ---
+  // --- GRADING (Updated with Metric Purity Logic) ---
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
     final int totalTrials = seq.length;
+
+    // 1. Safety Check (Not enough data)
     if (totalTrials < widget.nBack + 1) {
-      return { "Working Memory": 0.0, "Response Inhibition": 0.0, "Reaction Time (Choice)": 0.0, "Observation / Vigilance": 0.0 };
+      return gradeBlinkFromStats(
+        isTarget: [],
+        userClaimed: [],
+        hitReactionTimesMs: [],
+      );
     }
 
-    int targets = 0, distractors = 0;
-    int nHits = 0, nMisses = 0, nFalseAlarms = 0, nCorrectRejections = 0;
+    // 2. Prepare Raw Data
+    final List<bool> isTargetList = List.generate(totalTrials, (i) => _isMatch(i));
+    final List<bool> userClaimedList = seq.map((s) => s.userClaimed).toList();
 
-    for (int i = 0; i < totalTrials; i++) {
-      final bool isTarget = _isMatch(i);
-      final bool claimed = seq[i].userClaimed;
+    // 3. Delegate to The Brain (blink_grading.dart)
+    final scores = gradeBlinkFromStats(
+      isTarget: isTargetList,
+      userClaimed: userClaimedList,
+      hitReactionTimesMs: hitReactionTimes,
+    );
 
-      if (isTarget) {
-        targets++;
-        if (claimed) nHits++; else nMisses++;
-      } else {
-        distractors++;
-        if (claimed) nFalseAlarms++; else nCorrectRejections++;
-      }
-    }
-    if (targets == 0 || distractors == 0) return { "Working Memory": 0.0, "Response Inhibition": 0.0, "Reaction Time (Choice)": 0.0, "Observation / Vigilance": 0.0 };
+    // Optional: Print to console for debugging
+    print("Scores Calculated: $scores");
 
-    final double hitRate = nHits / targets;
-    final double specificity = nCorrectRejections / distractors;
-    final double falseAlarmRate = nFalseAlarms / distractors;
-    final double balancedAcc = (hitRate + specificity) / 2.0;
-
-    final double workingMemory = clamp01(hitRate * sqrt(specificity));
-    final double responseInhibition = clamp01(1.0 - falseAlarmRate);
-
-    final int engagement = nHits + nFalseAlarms;
-    final double minEngagement = targets * 0.3;
-
-    final double engagementFactor =
-    minEngagement > 0
-        ? clamp01(engagement / minEngagement)
-        : 0.0;
-    double observationVigilance = 0.0;
-    {
-      final int split = totalTrials ~/ 2;
-      int t1 = 0, d1 = 0, h1 = 0, cr1 = 0;
-      int t2 = 0, d2 = 0, h2 = 0, cr2 = 0;
-      for (int i = 0; i < totalTrials; i++) {
-        final bool isTarget = _isMatch(i);
-        final bool claimed = seq[i].userClaimed;
-        final bool firstHalf = i < split;
-        if (firstHalf) { if (isTarget) { t1++; if (claimed) h1++; } else { d1++; if (!claimed) cr1++; } }
-        else { if (isTarget) { t2++; if (claimed) h2++; } else { d2++; if (!claimed) cr2++; } }
-      }
-      if (t1 > 0 && d1 > 0 && t2 > 0 && d2 > 0) {
-        final double ba1 = ((h1 / t1) + (cr1 / d1)) / 2.0;
-        final double ba2 = ((h2 / t2) + (cr2 / d2)) / 2.0;
-        final diff = (ba1 - ba2).abs();
-
-        // [FIX] Squaring the difference makes the metric tolerant of small
-        // variance (1 error) while still punishing large fatigue drops.
-        final stability = clamp01(1.0 - (diff * diff * 3.0));
-
-        final observationVigilance = clamp01(stability * balancedAcc);
-      }
-    }
-
-    double reactionTimeChoice = 0.0;
-    {
-      if (hitReactionTimes.length >= 2 && balancedAcc > 0.0) {
-        final sorted = List<int>.from(hitReactionTimes)..sort();
-        final int mid = sorted.length ~/ 2;
-        final double medianMs = (sorted.length.isOdd) ? sorted[mid].toDouble() : ((sorted[mid - 1] + sorted[mid]) / 2.0);
-
-        // YOUR FIXED TIMING:
-        const double bestMs = 550.0;
-        const double worstMs = 1500.0;
-
-        final double raw = clamp01(1.0 - ((medianMs - bestMs) / (worstMs - bestMs)));
-        reactionTimeChoice = clamp01(raw * balancedAcc);
-      }
-    }
-    final double wmFinal = workingMemory * engagementFactor;
-    final double riFinal = responseInhibition * engagementFactor;
-    final double rtFinal = reactionTimeChoice * engagementFactor;
-    final double ovFinal = observationVigilance * engagementFactor;
-    print(wmFinal);
-    print(riFinal);
-    print(rtFinal);
-    print(ovFinal);
-    return {
-      "Working Memory": wmFinal,
-      "Response Inhibition": riFinal,
-      "Reaction Time (Choice)": rtFinal,
-      "Observation / Vigilance": ovFinal,
-    };
+    return scores;
   }
 
   @override

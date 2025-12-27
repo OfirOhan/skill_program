@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // REQUIRED FOR HAPTICS & SOUND
+import '../grading/logic_blocks_grading.dart';
 
 class LogicBlocksGame extends StatefulWidget {
   const LogicBlocksGame({Key? key}) : super(key: key);
@@ -246,87 +247,13 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    final int n = [
-      _playedGridSizes.length,
-      _levelSolved.length,
-      _levelTimeMs.length,
-      _levelMovesList.length,
-      _levelWastedCycles.length,
-    ].reduce((a, b) => a < b ? a : b);
-
-    if (n <= 0) {
-      return {
-        "Deductive Reasoning": 0.0,
-        "Algorithmic Logic": 0.0,
-        "Information Processing Speed": 0.0,
-      };
-    }
-
-    // --- Completion weighted by problem size (tiles = gridSize^2) ---
-    double totalW = 0.0;
-    double solvedW = 0.0;
-
-    for (int i = 0; i < n; i++) {
-      final int size = _playedGridSizes[i];
-      final double w = (size * size).toDouble(); // defensible difficulty weight
-      totalW += w;
-      if (_levelSolved[i]) solvedW += w;
-    }
-
-    final double completion = totalW <= 0 ? 0.0 : clamp01(solvedW / totalW);
-
-    // --- Deductive Reasoning: solving these constraint puzzles is the direct evidence ---
-    final double deductiveReasoning = completion;
-
-    // --- Algorithmic Logic: efficiency, using only non-arbitrary evidence ---
-    // 1) moves-per-tile (lower is better)
-    // 2) wasted full-cycles (4 taps return to same state => definite dithering)
-    double algoSum = 0.0;
-
-    for (int i = 0; i < n; i++) {
-      final int size = _playedGridSizes[i];
-      final int tiles = size * size;
-
-      final int mv = _levelMovesList[i];
-      final int cycles = _levelWastedCycles[i];
-
-      final double movesPerTile = tiles == 0 ? 999.0 : (mv / tiles);
-      final double movesScore = 1.0 / (1.0 + movesPerTile);     // 0..1, no magic thresholds
-      final double cyclesScore = 1.0 / (1.0 + cycles.toDouble()); // 0..1, conservative
-
-      // Combine; only count strongly if they solved (avoid rewarding random spinning)
-      final double perLevelAlgo = _levelSolved[i]
-          ? sqrt(movesScore * cyclesScore)
-          : 0.0;
-
-      algoSum += perLevelAlgo;
-    }
-
-    final double algorithmicLogic = clamp01(algoSum / n);
-
-    // --- Information Processing Speed: median level time, earned & gated by completion ---
-    double informationProcessingSpeed = 0.0;
-    {
-      final times = _levelTimeMs.take(n).toList()..sort();
-      final int mid = times.length ~/ 2;
-      final double medianMs = times.length.isOdd
-          ? times[mid].toDouble()
-          : ((times[mid - 1] + times[mid]) / 2.0);
-
-      const double limitMs = 15000.0;
-      final double rawSpeed = clamp01(1.0 - (medianMs / limitMs));
-
-      // Earned: no speed points if they didn't complete levels
-      informationProcessingSpeed = clamp01(rawSpeed * completion);
-    }
-
-    return {
-      "Deductive Reasoning": deductiveReasoning,
-      "Algorithmic Logic": algorithmicLogic,
-      "Information Processing Speed": informationProcessingSpeed,
-    };
+    return LogicBlocksGrading.grade(
+      playedGridSizes: _playedGridSizes,
+      levelSolved: _levelSolved,
+      levelTimeMs: _levelTimeMs,
+      levelMovesList: _levelMovesList,
+      levelWastedCycles: _levelWastedCycles,
+    );
   }
 
 

@@ -3,6 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// [ADDED] Import the matrix grading logic
+import '../grading/matrix_grading.dart';
+
 // --- VISUAL CONFIGURATION ---
 enum ShapeType {
   square, circle, triangle, diamond, arrow, star, plus, cross,
@@ -40,13 +43,14 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   bool isGameOver = false;
 
   // --- CHANGED: Precise Result Tracking ---
-  // We now track exactly which items were correct to separate skills reliably.
   List<bool> itemResults = [];
   List<int> itemTimes = [];
 
-  int startMs = 0;
+  // Need to track descriptions and difficulties for the brain
+  List<String> itemDescriptions = [];
+  List<int> itemDifficulties = [];
 
-  // Timer
+  int startMs = 0;
   Timer? _roundTimer;
   int remainingSeconds = 15;
 
@@ -54,6 +58,11 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
   void initState() {
     super.initState();
     items = _generateVisualItems();
+
+    // Pre-fill metadata for grading
+    itemDescriptions = items.map((i) => i.logicDescription).toList();
+    itemDifficulties = items.map((i) => i.difficulty).toList();
+
     _startRound();
   }
 
@@ -87,7 +96,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     _roundTimer?.cancel();
     HapticFeedback.vibrate();
 
-    // Record explicit failure (False) and max time penalty
+    // Record failure (False) and max penalty time
     itemResults.add(false);
     itemTimes.add(15000);
 
@@ -109,122 +118,42 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     itemTimes.add(elapsed);
 
     final item = items[index];
-
-    // Record specific result
     bool isCorrect = (optionIndex == item.correctIndex);
     itemResults.add(isCorrect);
-    
+
     if (isCorrect) {
-       HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
     } else {
-       HapticFeedback.heavyImpact();
+      HapticFeedback.heavyImpact();
     }
 
     setState(() => index++);
     _startRound();
   }
 
+  // --- GRADING DELEGATE ---
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    if (itemResults.isEmpty || itemTimes.isEmpty || items.isEmpty) {
-      return {
-        "Inductive Reasoning": 0.0,
-        "Deductive Reasoning": 0.0,
-        "Quantitative Reasoning": 0.0,
-        "Information Processing Speed": 0.0,
-      };
+    // 1. Safety Check
+    if (itemResults.isEmpty) {
+      return gradeMatrixFromStats(
+        itemDescriptions: [],
+        itemDifficulties: [],
+        itemResults: [],
+        itemTimesMs: [],
+      );
     }
 
-    // Safety: only grade what we have evidence for (avoid index mismatch)
-    final int n = min(items.length, min(itemResults.length, itemTimes.length));
-    if (n <= 0) {
-      return {
-        "Inductive Reasoning": 0.0,
-        "Deductive Reasoning": 0.0,
-        "Quantitative Reasoning": 0.0,
-        "Information Processing Speed": 0.0,
-      };
-    }
+    // 2. Delegate to matrix_grading.dart
+    final scores = gradeMatrixFromStats(
+      itemDescriptions: itemDescriptions,
+      itemDifficulties: itemDifficulties,
+      itemResults: itemResults,
+      itemTimesMs: itemTimes,
+    );
 
-    // ---- Intermediate metrics (transparent) ----
-    double totalDiff = 0.0;
-    double correctWeighted = 0.0;
-
-    // Category buckets (NO overlap to avoid double-counting)
-    double inductiveSum = 0.0, inductiveMax = 0.0;   // Rotation, Cyclic Pattern
-    double deductiveSum = 0.0, deductiveMax = 0.0;   // Sudoku Logic, Column XOR
-    double quantSum = 0.0, quantMax = 0.0;           // Subtraction, Arithmetic
-
-    for (int i = 0; i < n; i++) {
-      final item = items[i];
-      final bool correct = itemResults[i];
-      final double w = item.difficulty.toDouble();
-
-      totalDiff += w;
-      if (correct) correctWeighted += w;
-
-      final desc = item.logicDescription;
-
-      // Inductive: infer rule from examples (non-numeric visual rule inference)
-      if (desc == "Rotation" || desc == "Cyclic Pattern") {
-        inductiveMax += w;
-        if (correct) inductiveSum += w;
-      }
-
-      // Deductive: apply strict constraints / rule logic
-      if (desc == "Sudoku Logic (Unique Row/Col)" || desc == "Column XOR") {
-        deductiveMax += w;
-        if (correct) deductiveSum += w;
-      }
-
-      // Quantitative: numeric operations / counts
-      if (desc == "Subtraction" || desc == "Arithmetic") {
-        quantMax += w;
-        if (correct) quantSum += w;
-      }
-    }
-
-    final double overallWeightedAccuracy =
-    totalDiff <= 0.0 ? 0.0 : clamp01(correctWeighted / totalDiff);
-
-    final double inductive =
-    inductiveMax <= 0.0 ? 0.0 : clamp01(inductiveSum / inductiveMax);
-
-    final double deductive =
-    deductiveMax <= 0.0 ? 0.0 : clamp01(deductiveSum / deductiveMax);
-
-    final double quantitative =
-    quantMax <= 0.0 ? 0.0 : clamp01(quantSum / quantMax);
-
-    // ---- Information Processing Speed (earned; gated by correctness) ----
-    // Use median time (robust) normalized by the round limit (15s = 15000ms).
-    // No extra magic constants.
-    double informationProcessingSpeed = 0.0;
-    {
-      final times = itemTimes.take(n).toList();
-      times.sort();
-      final int mid = times.length ~/ 2;
-      final double medianMs = times.length.isOdd
-          ? times[mid].toDouble()
-          : ((times[mid - 1] + times[mid]) / 2.0);
-
-      final double rawSpeed = clamp01(1.0 - (medianMs / 15000.0));
-
-      // Gate speed by discrimination quality (no fast-random guessing points)
-      informationProcessingSpeed = clamp01(rawSpeed * overallWeightedAccuracy);
-    }
-
-    return {
-      "Inductive Reasoning": inductive,
-      "Deductive Reasoning": deductive,
-      "Quantitative Reasoning": quantitative,
-      "Information Processing Speed": informationProcessingSpeed,
-    };
+    print("Matrix Scores: $scores");
+    return scores;
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -243,9 +172,9 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
               Text("Score: ${itemResults.where((b) => b).length} / ${items.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () { 
-                   HapticFeedback.lightImpact(); 
-                   Navigator.of(context).pop(grade());
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
@@ -257,7 +186,6 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
       );
     }
 
-    // ... (Rest of the UI build method remains exactly the same)
     final item = items[index];
     bool is3x3 = item.gridSize == 3;
 
@@ -273,12 +201,12 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
@@ -352,7 +280,7 @@ class _MatrixSwipeWidgetState extends State<MatrixSwipeWidget> {
     );
   }
 
-  // ... (Helper widgets _buildCell, _drawCellContent, etc. remain unchanged)
+  // ... (Rest of UI methods: _buildCell, _drawCellContent, etc. remain unchanged)
   Widget _buildCell(List<MatrixShape> shapes) {
     bool isEmpty = shapes.isEmpty || shapes.every((s) => s.shape == ShapeType.none);
     return Container(

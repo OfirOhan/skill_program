@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/spin_grading.dart';
 
 class SpinGame extends StatefulWidget {
   const SpinGame({Key? key}) : super(key: key);
@@ -132,69 +133,11 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    // Use only trials we actually have evidence for
-    final int n = [
-      levels.length,
-      _trialCorrect.length,
-      _trialRtMs.length,
-      _trialLimitMs.length,
-    ].reduce((a, b) => a < b ? a : b);
-
-    if (n == 0) {
-      return {
-        "Mental Rotation": 0.0,
-        "Pattern Recognition": 0.0,
-        "Information Processing Speed": 0.0,
-      };
-    }
-
-    // -------------------------
-    // 1) Accuracy (smoothed)
-    // -------------------------
-    int correct = 0;
-    for (int i = 0; i < n; i++) {
-      if (_trialCorrect[i]) correct++;
-    }
-
-    // Beta(1,1) posterior mean: avoids 0.0/1.0 extremes on n=3
-    final double smoothedAccuracy = (correct + 1) / (n + 2);
-
-    // -------------------------
-    // 2) Speed (normalized, median)
-    // -------------------------
-    // rawSpeed_i = 1 - rt/limit  (timeouts => 0)
-    final List<double> rawSpeeds = [];
-    for (int i = 0; i < n; i++) {
-      final int limit = _trialLimitMs[i];
-      final int rt = _trialRtMs[i].clamp(0, limit);
-      rawSpeeds.add(clamp01(1.0 - (rt / limit)));
-    }
-
-    rawSpeeds.sort();
-    final int mid = rawSpeeds.length ~/ 2;
-    final double medianRawSpeed = rawSpeeds.length.isOdd
-        ? rawSpeeds[mid]
-        : (rawSpeeds[mid - 1] + rawSpeeds[mid]) / 2.0;
-
-    // Earned speed: fast only counts if correct (anti-guess)
-    final double earnedSpeed = clamp01(medianRawSpeed * smoothedAccuracy);
-
-    // -------------------------
-    // 3) Skill mapping (no double-forcing)
-    // -------------------------
-    // Pattern Recognition: structural identification (accuracy-dominant)
-    final double patternRecognition = clamp01(smoothedAccuracy);
-
-    // Mental Rotation: matching under rotation; add a small earned-speed component
-    final double mentalRotation = clamp01(0.75 * smoothedAccuracy + 0.25 * earnedSpeed);
-
-    return {
-      "Mental Rotation": mentalRotation,
-      "Pattern Recognition": patternRecognition,
-      "Information Processing Speed": earnedSpeed,
-    };
+    return SpinGrading.grade(
+      results: _trialCorrect,
+      reactionTimes: _trialRtMs,
+      limits: _trialLimitMs,
+    );
   }
 
 

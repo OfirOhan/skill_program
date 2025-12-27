@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/word_ladder_grading.dart';
 
 class WordLadderGame extends StatefulWidget {
   const WordLadderGame({Key? key}) : super(key: key);
@@ -129,77 +130,12 @@ class _WordLadderGameState extends State<WordLadderGame> {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    final int n = [
-      items.length,
-      itemCorrect.length,
-      itemTimesMs.length,
-    ].reduce((a, b) => a < b ? a : b);
-
-    if (n <= 0) {
-      return {
-        "Inductive Reasoning": 0.0,
-        "Abstract Thinking": 0.0,
-        "Information Processing Speed": 0.0,
-      };
-    }
-
-    // ---- Intermediate metrics ----
-    int correctTotal = 0;
-
-    int inductiveN = 0, inductiveCorrect = 0;
-    int abstractN = 0, abstractCorrect = 0;
-
-    for (int i = 0; i < n; i++) {
-      final item = items[i];
-      final bool correct = itemCorrect[i];
-      if (correct) correctTotal++;
-
-      final String cat = item.category;
-
-      final bool isAbstractBucket =
-          cat.contains("SYSTEMS") || cat.contains("EMERGENCE");
-
-      if (isAbstractBucket) {
-        abstractN++;
-        if (correct) abstractCorrect++;
-      } else {
-        inductiveN++;
-        if (correct) inductiveCorrect++;
-      }
-    }
-
-    final double overallAccuracy = clamp01(correctTotal / n);
-
-    final double inductiveAccuracy =
-    inductiveN == 0 ? 0.0 : clamp01(inductiveCorrect / inductiveN);
-
-    final double abstractAccuracy =
-    abstractN == 0 ? 0.0 : clamp01(abstractCorrect / abstractN);
-
-    // ---- Information Processing Speed (earned; gated by correctness) ----
-    double informationProcessingSpeed = 0.0;
-    {
-      final times = itemTimesMs.take(n).toList()..sort();
-      final int mid = times.length ~/ 2;
-      final double medianMs = times.length.isOdd
-          ? times[mid].toDouble()
-          : ((times[mid - 1] + times[mid]) / 2.0);
-
-      // Normalize by the actual question time limit (no magic constants)
-      final double rawSpeed = clamp01(1.0 - (medianMs / (timePerQuestion * 1000)));
-
-      // Earned speed: no fast-guessing points
-      informationProcessingSpeed = clamp01(rawSpeed * overallAccuracy);
-    }
-
-    // ---- Skills (no overlap / no forced skills) ----
-    return {
-      "Inductive Reasoning": inductiveAccuracy,
-      "Abstract Thinking": abstractAccuracy,
-      "Information Processing Speed": informationProcessingSpeed,
-    };
+    return WordLadderGrading.grade(
+      totalItems: items.length,
+      results: itemCorrect,
+      reactionTimes: itemTimesMs,
+      categories: items.map((e) => e.category).toList(),
+    );
   }
 
 

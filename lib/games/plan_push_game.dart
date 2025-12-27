@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/plan_push_grading.dart';
 
 class PlanPushGame extends StatefulWidget {
   const PlanPushGame({Key? key}) : super(key: key);
@@ -186,47 +187,13 @@ class _PlanPushGameState extends State<PlanPushGame> {
 
 
   Map<String, double> grade() {
-    final int days = earnedValues.length;
-    if (days == 0) {
-      return {
-        "Planning & Prioritization": 0.0,
-        "Constraint Management": 0.0,
-        "Risk Management": 0.0,
-        "Decision Under Pressure": 0.0,
-      };
-    }
-
-    // 1) Quality vs optimal (true scheduling effectiveness)
-    double sumQuality = 0.0;
-    for (int i = 0; i < days; i++) {
-      final opt = max(1, optimalValues[i]);
-      sumQuality += (earnedValues[i] / opt).clamp(0.0, 1.0);
-    }
-    final double avgQuality = (sumQuality / days).clamp(0.0, 1.0);
-
-    // 2) Constraint Management: staying within time + not wasting big chunks
-    final double constraintManagement =
-    (1.0 - ((overtimeErrors * 0.75 + underTimeErrors * 0.25) / days)).clamp(0.0, 1.0);
-
-    // 3) Risk Management: strongly about avoiding overtime (hard constraint violation)
-    final double riskManagement =
-    (1.0 - (overtimeErrors / days)).clamp(0.0, 1.0);
-
-    // 4) Decision Under Pressure: quality + submit speed (small weight)
-    final double avgRt = submitRTs.isEmpty
-        ? 30000.0
-        : submitRTs.reduce((a, b) => a + b) / submitRTs.length;
-
-    // 4s fast, 30s slow
-    final double rawSpeed = (1.0 - ((avgRt - 4000.0) / 26000.0)).clamp(0.0, 1.0);
-    final double decisionUnderPressure = (0.8 * avgQuality + 0.2 * rawSpeed).clamp(0.0, 1.0);
-
-    return {
-      "Planning & Prioritization": avgQuality,
-      "Constraint Management": constraintManagement,
-      "Risk Management": riskManagement,
-      "Decision Under Pressure": decisionUnderPressure,
-    };
+    return PlanPushGrading.grade(
+      earnedValues: earnedValues,
+      optimalValues: optimalValues,
+      submitRTs: submitRTs,
+      overtimeErrors: overtimeErrors,
+      underTimeErrors: underTimeErrors,
+    );
   }
 
 

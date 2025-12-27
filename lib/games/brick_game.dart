@@ -1,8 +1,7 @@
-// lib/brick_game.dart
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/brick_grading.dart';
 
 // --- DATA & CONFIG (Preserved) ---
 
@@ -11,69 +10,11 @@ int divergentUsedMs = 0;           // how long they actually brainstormed
 int convergentStartMs = 0;         // when decision phase begins
 int convergentDecisionMs = -1;     // time-to-pick within decision phase; -1 = no decision
 
-final Set<String> _englishWords = {
-  "door", "doorstop", "weapon", "build", "pedestal", "paint", "powder",
-  "crush", "pigment", "throw", "window", "art", "sculpture", "support",
-  "press", "hold", "paperweight", "display", "wall", "design", "color",
-  "decorate", "stack", "heat", "warm", "insulate", "tool", "plant",
-  "garden", "planter", "seat", "step", "bench", "anchor", "weight",
-  "exercise", "paper", "book", "bookend"
-};
+// --- HELPERS (Delegated to BrickHelpers in grading file) ---
+bool _containsRealWord(String idea) => BrickHelpers.containsRealWord(idea);
 
-final Set<String> _commonIdeas = {
-  "doorstop", "paperweight", "build wall", "build", "throw", "weapon", "bookend", "step",
-};
+List<String> _extractKeywords(String idea) => BrickHelpers.extractKeywords(idea);
 
-final Map<String, String> _keywordToCategory = {
-  "door": "practical", "doorstop": "practical", "paper": "practical", "paperweight": "practical",
-  "book": "practical", "bookend": "practical", "build": "construction", "wall": "construction",
-  "stack": "construction", "paint": "art", "pigment": "art", "powder": "art", "crush": "art",
-  "sculpture": "art", "seat": "furniture", "bench": "furniture", "step": "furniture",
-  "weapon": "danger", "throw": "danger", "heat": "survival", "warm": "survival",
-  "plant": "garden", "planter": "garden", "anchor": "utility", "weight": "utility", "exercise": "utility",
-};
-
-// --- HELPERS ---
-bool _containsRealWord(String idea) {
-  final parts = idea.toLowerCase().split(RegExp(r'[^a-z]+'));
-  return parts.any((w) => _englishWords.contains(w));
-}
-
-List<String> _extractKeywords(String idea) {
-  return idea.toLowerCase().split(RegExp(r'[^a-z]+')).where((w) => w.isNotEmpty && _englishWords.contains(w)).toList();
-}
-
-String? _detectCategory(String idea) {
-  final kws = _extractKeywords(idea);
-  for (final k in kws) {
-    if (_keywordToCategory.containsKey(k)) return _keywordToCategory[k];
-  }
-  return null;
-}
-
-bool _isCommonIdea(String idea) {
-  final lowered = idea.toLowerCase();
-  for (final c in _commonIdeas) {
-    if (lowered.contains(c)) return true;
-  }
-  return false;
-}
-
-double _elaborationScore(String idea) {
-  final kws = _extractKeywords(idea).length;
-  return min(kws / 6.0, 1.0);
-}
-
-double _originalityForIdea(String idea, Map<String, int> freq) {
-  if (!_containsRealWord(idea)) return 0.0;
-  if (_isCommonIdea(idea)) return 0.0;
-  final kws = _extractKeywords(idea);
-  if (kws.isEmpty) return 0.0;
-  final primary = kws.first;
-  final f = freq[primary] ?? 0;
-  if (f <= 1) return 1.0;
-  return (1.0 / (f)).clamp(0.0, 1.0);
-}
 
 class BrickGame extends StatefulWidget {
   const BrickGame({Key? key}) : super(key: key);
@@ -205,151 +146,16 @@ class _BrickGameState extends State<BrickGame> {
   }
 
   Map<String, double> calculateScores() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    bool isValidIdea(String s) => _containsRealWord(s);
-
-    if (ideas.isEmpty) {
-      return {
-        "Ideation Fluency": 0.0,
-        "Divergent Thinking": 0.0,
-        "Cognitive Flexibility": 0.0,
-        "Planning & Prioritization": 0.0,
-        "Decision Under Pressure": 0.0,
-      };
-    }
-
-    final List<String> validIdeas = ideas.where(isValidIdea).toList();
-    final int validCount = validIdeas.length;
-
-    // No valid ideas => no defensible creativity evidence
-    if (validCount == 0) {
-      return {
-        "Ideation Fluency": 0.0,
-        "Divergent Thinking": 0.0,
-        "Cognitive Flexibility": 0.0,
-        "Planning & Prioritization": 0.0,
-        "Decision Under Pressure": 0.0,
-      };
-    }
-
-    // -----------------------------------
-    // 1) Ideation Fluency (valid idea rate)
-    // -----------------------------------
-    // Normalize to "1 valid idea per ~5 seconds" as a reasonable target,
-    // derived from the actual time used (no fixed magic 9 count).
-    final int usedMs = (divergentUsedMs > 0)
-        ? divergentUsedMs.clamp(1, divergentDuration * 1000)
-        : (divergentDuration * 1000);
-
-    final double usedSeconds = usedMs / 1000.0;
-    final double targetIdeas = usedSeconds / 5.0; // 1 idea / 5s target
-    final double ideationFluency = clamp01(validCount / (targetIdeas <= 0 ? 1.0 : targetIdeas));
-
-    // -------------------------------------------
-    // 2) Divergent Thinking (originality of ideas)
-    // -------------------------------------------
-    // Only defensible if there are multiple valid ideas (stability).
-    double divergentThinking = 0.0;
-    if (validCount >= 2) {
-      double sumOrig = 0.0;
-      for (final idea in validIdeas) {
-        sumOrig += _originalityForIdea(idea, keywordFrequency);
-      }
-      divergentThinking = clamp01(sumOrig / validCount);
-    } else {
-      divergentThinking = 0.0;
-    }
-
-    // ---------------------------------------------------
-    // 3) Cognitive Flexibility (semantic category diversity)
-    // ---------------------------------------------------
-    // Use normalized Shannon entropy across detected categories (0..1).
-    // Requires enough categorized evidence.
-    double cognitiveFlexibility = 0.0;
-    {
-      final Map<String, int> catFreq = {};
-      int categorized = 0;
-
-      for (final idea in validIdeas) {
-        final cat = _detectCategory(idea);
-        if (cat != null) {
-          categorized++;
-          catFreq[cat] = (catFreq[cat] ?? 0) + 1;
-        }
-      }
-
-      final int K = _keywordToCategory.values.toSet().length; // max possible categories in your map
-
-      if (categorized >= 2 && catFreq.length >= 2 && K >= 2) {
-        double h = 0.0;
-        catFreq.forEach((_, c) {
-          final double p = c / categorized;
-          h += -p * log(p);
-        });
-        final double hMax = log(K.toDouble());
-        cognitiveFlexibility = clamp01(hMax <= 0 ? 0.0 : (h / hMax));
-      } else {
-        cognitiveFlexibility = 0.0;
-      }
-    }
-
-    // ----------------------------------------------------
-    // 4) Planning & Prioritization (picked best-of-own-ideas)
-    // ----------------------------------------------------
-    // Evidence only if they actually chose an option.
-    // Score = selectedQuality / bestQuality among their valid ideas.
-    double planningPrioritization = 0.0;
-    double selectedQualityRatio = 0.0;
-
-    double qualityOf(String idea) {
-      // objective: originality + elaboration (both derived from typed content)
-      final double o = _originalityForIdea(idea, keywordFrequency);
-      final double e = _elaborationScore(idea);
-      return clamp01(0.65 * o + 0.35 * e);
-    }
-
-    if (convergentChosen &&
-        selectedOptionIndex >= 0 &&
-        selectedOptionIndex < ideas.length &&
-        isValidIdea(ideas[selectedOptionIndex])) {
-      final String selected = ideas[selectedOptionIndex];
-
-      double best = 0.0;
-      for (final v in validIdeas) {
-        final q = qualityOf(v);
-        if (q > best) best = q;
-      }
-
-      final double selQ = qualityOf(selected);
-
-      selectedQualityRatio = (best <= 0.0) ? 0.0 : clamp01(selQ / best);
-      planningPrioritization = selectedQualityRatio;
-    } else {
-      planningPrioritization = 0.0;
-      selectedQualityRatio = 0.0;
-    }
-
-    // ------------------------------------------
-    // 5) Decision Under Pressure (commit quickly)
-    // ------------------------------------------
-    // Direct evidence: made a decision in the short convergent window,
-    // and did so quickly, AND the choice was good (quality ratio).
-    double decisionUnderPressure = 0.0;
-    if (convergentChosen && convergentDecisionMs >= 0) {
-      final double timeScore = clamp01(1.0 - (convergentDecisionMs / (convergentDuration * 1000.0)));
-      decisionUnderPressure = clamp01(timeScore * selectedQualityRatio);
-    } else {
-      decisionUnderPressure = 0.0;
-    }
-
-    return {
-      "Ideation Fluency": ideationFluency,
-      "Divergent Thinking": divergentThinking,
-      "Cognitive Flexibility": cognitiveFlexibility,
-      "Planning & Prioritization": planningPrioritization,
-      "Decision Under Pressure": decisionUnderPressure,
-    };
+    return BrickGrading.grade(
+      ideas: ideas,
+      keywordFrequency: keywordFrequency,
+      divergentDuration: divergentDuration,
+      divergentUsedMs: divergentUsedMs,
+      convergentChosen: convergentChosen,
+      selectedOptionIndex: selectedOptionIndex,
+      convergentDecisionMs: convergentDecisionMs,
+      convergentDuration: convergentDuration,
+    );
   }
 
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/word_group_grading.dart';
 
 class WordGroupsGame extends StatefulWidget {
   const WordGroupsGame({Key? key}) : super(key: key);
@@ -219,16 +220,11 @@ class _SemanticSieveGameState extends State<WordGroupsGame> {
 
   // --- GRADING ALGORITHM ---
   Map<String, double> grade() {
-    double breadth = _sessionQueue.isEmpty ? 0.0 : (_scoreCorrect / _sessionQueue.length);
-    double avgRt = _reactionTimes.isEmpty ? 7000 :
-    _reactionTimes.reduce((a,b)=>a+b) / _reactionTimes.length;
-
-    double fluency = (1.0 - ((avgRt - 2000) / 5000)).clamp(0.0, 1.0);
-
-    return {
-      "Vocabulary Breadth": double.parse(breadth.toStringAsFixed(2)),
-      "Verbal Fluency": double.parse(fluency.toStringAsFixed(2)),
-    };
+    return WordGroupGrading.grade(
+      totalItems: _sessionQueue.length,
+      correctCount: _scoreCorrect,
+      reactionTimes: _reactionTimes,
+    );
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/precision_grading.dart';
 
 class PrecisionGame extends StatefulWidget {
   const PrecisionGame({Key? key}) : super(key: key);
@@ -230,37 +231,12 @@ class _PrecisionGameState extends State<PrecisionGame> {
   }
 
   Map<String, double> grade() {
-    if (_metricLevels == 0) {
-      return {
-        "Fine Motor Control": 0.0,
-        "Visuomotor Integration": 0.0,
-        "Movement Steadiness": 0.0,
-      };
-    }
-
-    final completion = (levelsCompleted / 3.0).clamp(0.0, 1.0);
-
-    final meanOffRate = (_sumOffRate / _metricLevels).clamp(0.0, 1.0);
-    final meanDevNorm = (_sumDevNorm / _metricLevels).clamp(0.0, 1.0);
-
-    // Tracking quality: balance “went out of bounds” + “how far from center”
-    final trackingQuality =
-    (1.0 - (0.55 * meanDevNorm + 0.45 * meanOffRate)).clamp(0.0, 1.0);
-
-    // Steadiness: more deviation-heavy (wobble)
-    final steadiness =
-    (1.0 - (0.75 * meanDevNorm + 0.25 * meanOffRate)).clamp(0.0, 1.0);
-
-    // Canonical skills
-    final fineMotorControl = trackingQuality;
-    final visuomotorIntegration = (trackingQuality * completion).clamp(0.0, 1.0);
-    final movementSteadiness = steadiness;
-
-    return {
-      "Fine Motor Control": fineMotorControl,
-      "Visuomotor Integration": visuomotorIntegration,
-      "Movement Steadiness": movementSteadiness,
-    };
+    return PrecisionGrading.grade(
+      metricLevels: _metricLevels,
+      levelsCompleted: levelsCompleted,
+      sumOffRate: _sumOffRate,
+      sumDevNorm: _sumDevNorm,
+    );
   }
 
 

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/beat_buddy_grading.dart';
 
 class BeatBuddyGame extends StatefulWidget {
   const BeatBuddyGame({Key? key}) : super(key: key);
@@ -387,15 +388,11 @@ class _BeatBuddyGameState extends State<BeatBuddyGame> with TickerProviderStateM
   }
 
   Map<String, double> grade() {
-    final double avgCents = _pitchErrorsCents.isEmpty
-        ? 500 : _pitchErrorsCents.reduce((a, b) => a + b) / _pitchErrorsCents.length;
-    final double pitchScore = (1.0 - (avgCents / 300)).clamp(0.0, 1.0);
-    final double rhythmScore = (_rhythmTotal == 0) ? 0.0 : (_rhythmCorrect / _rhythmTotal);
-
-    return {
-      "Auditory Pitch/Tone": double.parse(pitchScore.toStringAsFixed(2)),
-      "Auditory Rhythm": double.parse(rhythmScore.toStringAsFixed(2)),
-    };
+    return BeatBuddyGrading.grade(
+      pitchErrorsCents: _pitchErrorsCents,
+      rhythmCorrect: _rhythmCorrect,
+      rhythmTotal: _rhythmTotal,
+    );
   }
 
   // ==========================================

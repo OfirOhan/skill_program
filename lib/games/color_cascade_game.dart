@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
+import '../grading/color_cascade_grading.dart';
 class ColorCascadeGame extends StatefulWidget {
   const ColorCascadeGame({Key? key}) : super(key: key);
 
@@ -220,38 +220,13 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   }
 
   Map<String, double> grade() {
-    const int rounds = 4;
-
-    // Strict round wins (perfect sort + correct odd-tap rounds)
-    final double strictAccuracy = (totalCorrect / rounds).clamp(0.0, 1.0);
-
-    // Precision includes partial credit on sort + 0/1 on grid rounds
-    final double precision = (totalPrecision / rounds).clamp(0.0, 1.0);
-
-    // Speed (includes timeout penalties)
-    final double avgRt = reactionTimes.isEmpty
-        ? _timeoutPenaltyMs.toDouble()
-        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
-
-    // 1200ms = fast, 25000ms = very slow
-    final double rawSpeed = (1.0 - ((avgRt - 1200.0) / (_timeoutPenaltyMs - 1200.0))).clamp(0.0, 1.0);
-
-    // Speed only counts if perception was actually good (anti-guess / anti-random tapping)
-    final double earnedSpeed = (rawSpeed * precision).clamp(0.0, 1.0);
-
-    final double colorDiscrimination = precision;
-    final double visualAcuity = (0.7 * precision + 0.3 * strictAccuracy).clamp(0.0, 1.0);
-    final double patternRecognition = (0.6 * strictAccuracy + 0.4 * precision).clamp(0.0, 1.0);
-
-    final double decisionUnderPressure = (0.8 * strictAccuracy + 0.2 * rawSpeed).clamp(0.0, 1.0);
-
-    return {
-      "Color Discrimination": colorDiscrimination,
-      "Visual Acuity": visualAcuity,
-      "Pattern Recognition": patternRecognition,
-      "Information Processing Speed": earnedSpeed,
-      "Decision Under Pressure": decisionUnderPressure,
-    };
+    return ColorCascadeGrading.grade(
+      totalCorrect: totalCorrect,
+      totalPrecision: totalPrecision,
+      rounds: 4,
+      reactionTimes: reactionTimes,
+      timeoutPenaltyMs: _timeoutPenaltyMs,
+    );
   }
 
 

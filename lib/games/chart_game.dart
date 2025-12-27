@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../grading/chart_grading.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -135,77 +136,21 @@ class _ChartDashGameState extends State<ChartDashGame> {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    int n = [
+    final int n = [
       questions.length,
       _qCorrect.length,
       _qRtMs.length,
       _qLimitMs.length,
     ].reduce((a, b) => a < b ? a : b);
 
-    if (n == 0) {
-      return {
-        "Quantitative Reasoning": 0.0,
-        "Information Processing Speed": 0.0,
-      };
-    }
+    // Construct math question identifier matching original logic (idx 1 and 2 are math)
+    final List<bool> isMath = List.generate(n, (i) => i == 1 || i == 2);
 
-    // -------------------------
-    // 1) Core accuracy metrics
-    // -------------------------
-    int correct = 0;
-    for (int i = 0; i < n; i++) {
-      if (_qCorrect[i]) correct++;
-    }
-    final double overallAccuracy = clamp01(correct / n);
-
-    // -----------------------------------------
-    // 2) Speed (normalized by each time limit)
-    // -----------------------------------------
-    // rawSpeed_i = 1 - rt/limit  (timeouts are rt=limit => 0)
-    final List<double> speeds = [];
-    for (int i = 0; i < n; i++) {
-      final int limit = _qLimitMs[i];
-      final int rt = _qRtMs[i].clamp(0, limit);
-      speeds.add(clamp01(1.0 - (rt / limit)));
-    }
-
-    speeds.sort();
-    final int mid = speeds.length ~/ 2;
-    final double medianRawSpeed = speeds.length.isOdd
-        ? speeds[mid]
-        : (speeds[mid - 1] + speeds[mid]) / 2.0;
-
-    // Earned speed: speed only counts if accuracy is there
-    final double informationProcessingSpeed = clamp01(medianRawSpeed * overallAccuracy);
-
-    // -----------------------------------------
-    // 3) Quantitative Reasoning (math-only items)
-    // -----------------------------------------
-    // In your generator, Q2 (index 1) and Q3 (index 2) require arithmetic.
-    int mathTrials = 0;
-    int mathCorrect = 0;
-    for (int i = 0; i < n; i++) {
-      if (i == 1 || i == 2) {
-        mathTrials++;
-        if (_qCorrect[i]) mathCorrect++;
-      }
-    }
-
-    final double mathAccuracy = mathTrials == 0 ? 0.0 : clamp01(mathCorrect / mathTrials);
-
-    // Evidence gate: only 2 math trials exist in this game design.
-    // If for any reason we have fewer, don’t overclaim.
-    final double mathEvidence = clamp01(mathTrials / 2.0);
-
-    // Also gate by overallAccuracy to reduce “lucky” spikes on tiny n
-    final double quantitativeReasoning = clamp01(mathAccuracy * mathEvidence * overallAccuracy);
-
-    return {
-      "Quantitative Reasoning": quantitativeReasoning,
-      "Information Processing Speed": informationProcessingSpeed,
-    };
+    return ChartGrading.grade(
+      results: _qCorrect.take(n).toList(),
+      reactionTimes: _qRtMs.take(n).toList(),
+      isMathQuestion: isMath,
+    );
   }
 
 

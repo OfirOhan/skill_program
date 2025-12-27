@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/split_tap_grading.dart';
 
 class SplitTapGame extends StatefulWidget {
   const SplitTapGame({Key? key}) : super(key: key);
@@ -52,9 +53,7 @@ class _SplitTapGameState extends State<SplitTapGame> {
 
   int _leftTargets = 0;
   int _leftDistractors = 0;
-  int _leftHitsT = 0;
-  int _leftMissesT = 0;
-  int _leftFalseAlarmTrials = 0;
+  int _leftHitsT = 0;       // target hits
   int _leftCorrectRejections = 0;
 
   // --- Instruction Adherence tracking ---
@@ -185,13 +184,11 @@ class _SplitTapGameState extends State<SplitTapGame> {
         _leftHitsT++;
         correct = true;
       } else {
-        _leftMissesT++;
         correct = false;
       }
     } else {
       _leftDistractors++;
       if (_leftTrialResponded) {
-        _leftFalseAlarmTrials++;
         correct = false;
       } else {
         _leftCorrectRejections++;
@@ -286,136 +283,19 @@ class _SplitTapGameState extends State<SplitTapGame> {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    // ---------- LEFT TASK (trial-based Go/No-Go) ----------
-    final int leftTotalTrials = _leftTargets + _leftDistractors;
-    if (leftTotalTrials <= 0) {
-      return {
-        "Response Inhibition": 0.0,
-        "Cognitive Flexibility": 0.0,
-        "Observation / Vigilance": 0.0,
-        "Quantitative Reasoning": 0.0,
-        "Reaction Time (Choice)": 0.0,
-      };
-    }
-
-    final double hitRate = _leftTargets == 0 ? 0.0 : clamp01(_leftHitsT / _leftTargets);
-    final double specificity = _leftDistractors == 0 ? 0.0 : clamp01(_leftCorrectRejections / _leftDistractors);
-    final double leftBalancedAccuracy = (hitRate + specificity) / 2.0;
-
-    // Response Inhibition: direct evidence = resisting taps on distractors (specificity)
-    // Reliability gate: need enough distractors to claim inhibition
-    final double inhibEvidence = clamp01(_leftDistractors / 8.0);
-    final double responseInhibition = clamp01(specificity * inhibEvidence);
-
-    // Observation / Vigilance: stability over time (first half vs second half) gated by competence
-    double observationVigilance = 0.0;
-    {
-      final int n = _leftTrialCorrect.length;
-      if (n >= 10) {
-        final int split = n ~/ 2;
-
-        // Recompute BA per half using trial labels
-        int t1 = 0, d1 = 0, h1 = 0, cr1 = 0;
-        int t2 = 0, d2 = 0, h2 = 0, cr2 = 0;
-
-        // We need target/distractor labels per trial: infer from postSwitch list? no.
-        // Instead, use the aggregate counts with per-trial correctness only is not enough,
-        // so we conservatively approximate vigilance using correctness rate stability
-        // (still direct evidence: correct vs incorrect per trial).
-        int c1 = 0, c2 = 0;
-        for (int i = 0; i < n; i++) {
-          if (i < split) { if (_leftTrialCorrect[i]) c1++; }
-          else { if (_leftTrialCorrect[i]) c2++; }
-        }
-
-        final double acc1 = clamp01(c1 / (split == 0 ? 1 : split));
-        final double acc2 = clamp01(c2 / ((n - split) == 0 ? 1 : (n - split)));
-
-        final double stability = clamp01(1.0 - (acc1 - acc2).abs());
-        observationVigilance = clamp01(stability * leftBalancedAccuracy);
-      } else {
-        observationVigilance = 0.0;
-      }
-    }
-
-    // Cognitive Flexibility: direct switch-cost evidence (post-switch trials vs baseline)
-    double cognitiveFlexibility = 0.0;
-    {
-      int baseN = 0, baseC = 0;
-      int swN = 0, swC = 0;
-
-      for (int i = 0; i < _leftTrialCorrect.length; i++) {
-        final bool isSwitchTrial = _leftTrialPostSwitch[i];
-        final bool correct = _leftTrialCorrect[i];
-        if (isSwitchTrial) { swN++; if (correct) swC++; }
-        else { baseN++; if (correct) baseC++; }
-      }
-
-      // Need enough evidence in both sets
-      if (swN >= 2 && baseN >= 8) {
-        final double baseAcc = clamp01(baseC / baseN);
-        final double swAcc = clamp01(swC / swN);
-
-        // switch cost: how much performance drops after a rule change
-        final double cost = clamp01((baseAcc - swAcc) < 0 ? 0.0 : (baseAcc - swAcc));
-        cognitiveFlexibility = clamp01((1.0 - cost) * baseAcc);
-      } else {
-        cognitiveFlexibility = 0.0;
-      }
-    }
-    double instructionAdherence = 0.0;
-    {
-      if (_postSwitchTrials >= 3) {
-        final double adherenceRate = clamp01(_postSwitchCorrect / _postSwitchTrials);
-
-        // Reliability gate: need enough switches to claim adherence
-        final double evidenceGate = clamp01(_postSwitchTrials / 5.0);
-
-        instructionAdherence = clamp01(adherenceRate * evidenceGate);
-      } else {
-        instructionAdherence = 0.0;
-      }
-    }
-
-    // ---------- RIGHT TASK (Math) ----------
-    final int mathTotal = mathHits + mathWrongs;
-    final double mathAccRaw = mathTotal == 0 ? 0.0 : clamp01(mathHits / mathTotal);
-
-    // Reliability gate: 1 correct answer shouldn't max Quantitative Reasoning
-    final double mathEvidence = clamp01(mathTotal / 3.0);
-    final double quantitativeReasoning = clamp01(mathAccRaw * mathEvidence);
-
-    // Reaction Time (Choice): median RT on answered math decisions, gated by accuracy + sample size
-    double reactionTimeChoice = 0.0;
-    {
-      if (mathRTs.length >= 5 && mathAccRaw > 0.0) {
-        final times = List<int>.from(mathRTs)..sort();
-        final int mid = times.length ~/ 2;
-        final double medianMs = times.length.isOdd
-            ? times[mid].toDouble()
-            : ((times[mid - 1] + times[mid]) / 2.0);
-
-        // Scale using a defensible range for 3-option mental arithmetic selection
-        const double bestMs = 600.0;
-        const double worstMs = 4500.0;
-        final double raw = clamp01(1.0 - ((medianMs - bestMs) / (worstMs - bestMs)));
-
-        reactionTimeChoice = clamp01(raw * quantitativeReasoning);
-      } else {
-        reactionTimeChoice = 0.0;
-      }
-    }
-
-    return {
-      "Response Inhibition": responseInhibition,
-      "Cognitive Flexibility": cognitiveFlexibility,
-      "Instruction Adherence": instructionAdherence,
-      "Observation / Vigilance": observationVigilance,
-      "Quantitative Reasoning": quantitativeReasoning,
-      "Reaction Time (Choice)": reactionTimeChoice,
-    };
+    return SplitTapGrading.grade(
+      leftTargets: _leftTargets,
+      leftDistractors: _leftDistractors,
+      leftHitsT: _leftHitsT,
+      leftCorrectRejections: _leftCorrectRejections,
+      leftTrialCorrect: _leftTrialCorrect,
+      leftTrialPostSwitch: _leftTrialPostSwitch,
+      postSwitchTrials: _postSwitchTrials,
+      postSwitchCorrect: _postSwitchCorrect,
+      mathHits: mathHits,
+      mathWrongs: mathWrongs,
+      mathRTs: mathRTs,
+    );
   }
 
 

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../grading/digit_shuffle_grading.dart';
 
 class DigitShuffleWidget extends StatefulWidget {
   const DigitShuffleWidget({Key? key}) : super(key: key);
@@ -201,97 +202,11 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   }
 
   Map<String, double> grade() {
-    double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
-
-    final int n = min(roundAccuracies.length, min(roundTimesMs.length, roundTaskTypes.length));
-    if (n <= 0) {
-      return {
-        "Rote Memorization": 0.0,
-        "Working Memory": 0.0,
-        "Quantitative Reasoning": 0.0,
-        "Information Processing Speed": 0.0,
-        "Cognitive Flexibility": 0.0,
-      };
-    }
-
-    // --- Helpers ---
-    double meanOf(List<double> xs) => xs.isEmpty ? 0.0 : xs.reduce((a, b) => a + b) / xs.length;
-    double meanInt(List<int> xs) => xs.isEmpty ? 0.0 : xs.reduce((a, b) => a + b) / xs.length;
-
-    // --- Overall accuracy for gating (no imputation) ---
-    final double overallAccuracy = clamp01(meanOf(roundAccuracies.take(n).toList()));
-
-    // --- Skill: Rote Memorization (Recall-only) ---
-    final recallAcc = <double>[];
-    // --- Skill: Working Memory (Sort-only to avoid overlap with Quantitative) ---
-    final sortAcc = <double>[];
-    // --- Skill: Quantitative Reasoning (Add-only) ---
-    final addAcc = <double>[];
-
-    for (int i = 0; i < n; i++) {
-      final t = roundTaskTypes[i];
-      final a = roundAccuracies[i];
-      if (t == 0) recallAcc.add(a);
-      if (t == 1) sortAcc.add(a);
-      if (t == 2) addAcc.add(a);
-    }
-
-    final double roteMemorization = clamp01(meanOf(recallAcc));
-    final double workingMemory = clamp01(meanOf(sortAcc));           // 0 if no sort evidence
-    final double quantitativeReasoning = clamp01(meanOf(addAcc));    // 0 if no add evidence
-
-    // --- Skill: Information Processing Speed (earned; gated by accuracy) ---
-    // Use median time normalized by 15s limit (no magic "4s excellent").
-    double informationProcessingSpeed = 0.0;
-    {
-      final times = roundTimesMs.take(n).toList()..sort();
-      final int mid = times.length ~/ 2;
-      final double medianMs = times.length.isOdd
-          ? times[mid].toDouble()
-          : ((times[mid - 1] + times[mid]) / 2.0);
-
-      final double rawSpeed = clamp01(1.0 - (medianMs / 15000.0));
-      informationProcessingSpeed = clamp01(rawSpeed * overallAccuracy);
-    }
-
-    // --- Skill: Cognitive Flexibility (direct switch-cost evidence) ---
-    // Needs BOTH switch and stay transitions; otherwise 0 (no evidence).
-    double cognitiveFlexibility = 0.0;
-    {
-      if (n >= 2) {
-        final switchIdx = <int>[];
-        final stayIdx = <int>[];
-
-        for (int i = 1; i < n; i++) {
-          final bool isSwitch = roundTaskTypes[i] != roundTaskTypes[i - 1];
-          (isSwitch ? switchIdx : stayIdx).add(i);
-        }
-
-        if (switchIdx.isNotEmpty && stayIdx.isNotEmpty) {
-          final double switchAcc = meanOf(switchIdx.map((i) => roundAccuracies[i]).toList());
-          final double stayAcc = meanOf(stayIdx.map((i) => roundAccuracies[i]).toList());
-
-          final double switchTime = meanInt(switchIdx.map((i) => roundTimesMs[i]).toList());
-          final double stayTime = meanInt(stayIdx.map((i) => roundTimesMs[i]).toList());
-
-          // Ratio-based (no arbitrary weights), then gated by competence
-          final double accRatio = (stayAcc <= 0.0) ? 0.0 : clamp01(switchAcc / stayAcc);
-          final double timeRatio = (switchTime <= 0.0) ? 0.0 : clamp01(stayTime / switchTime);
-
-          cognitiveFlexibility = clamp01(((accRatio + timeRatio) / 2.0) * overallAccuracy);
-        } else {
-          cognitiveFlexibility = 0.0;
-        }
-      }
-    }
-
-    return {
-      "Rote Memorization": roteMemorization,
-      "Working Memory": workingMemory,
-      "Quantitative Reasoning": quantitativeReasoning,
-      "Information Processing Speed": informationProcessingSpeed,
-      "Cognitive Flexibility": cognitiveFlexibility,
-    };
+    return DigitShuffleGrading.grade(
+      roundAccuracies: roundAccuracies,
+      roundTimesMs: roundTimesMs,
+      roundTaskTypes: roundTaskTypes,
+    );
   }
 
 
