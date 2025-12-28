@@ -2,18 +2,58 @@ library matrix_grading;
 
 import 'dart:math';
 
-/// Pure grading logic for Matrix Logic Game
-/// Inputs are the items and the user's results.
 Map<String, double> gradeMatrixFromStats({
-  required List<String> itemDescriptions, // "Rotation", "Arithmetic", etc.
-  required List<int> itemDifficulties,    // 1 to 6
-  required List<bool> itemResults,        // True if correct
-  required List<int> itemTimesMs,         // Time taken per item
+  required List<String> itemDescriptions,
+  required List<int> itemDifficulties,
+  required List<bool> itemResults,
+  required List<int> itemTimesMs,
 }) {
   double clamp01(num v) => v.clamp(0.0, 1.0).toDouble();
 
-  // Safety check
-  final int n = min(itemDescriptions.length, min(itemResults.length, itemTimesMs.length));
+  double difficultyWeight(int d) {
+    final clamped = d.clamp(1, 6);
+    return 0.92 + 0.016 * (clamped - 1);
+  }
+
+  double humanSpeedFactor(int ms) {
+    final t = ms.clamp(2000, 15000).toDouble();
+    return 1.0 - (t - 2000) / (15000 - 2000);
+  }
+
+  Map<String, double> skillWeightsFor(String desc) {
+    switch (desc) {
+      case "Rotation":
+        return {"Inductive Reasoning": 0.85, "Deductive Reasoning": 0.10, "Quantitative Reasoning": 0.05};
+      case "Subtraction":
+        return {"Inductive Reasoning": 0.10, "Deductive Reasoning": 0.10, "Quantitative Reasoning": 0.80};
+      case "Cyclic Pattern":
+        return {"Inductive Reasoning": 0.92, "Deductive Reasoning": 0.05, "Quantitative Reasoning": 0.03};
+      case "Sudoku Logic (Unique Row/Col)":
+        return {"Inductive Reasoning": 0.15, "Deductive Reasoning": 0.70, "Quantitative Reasoning": 0.15};
+      case "Arithmetic":
+        return {"Inductive Reasoning": 0.05, "Deductive Reasoning": 0.25, "Quantitative Reasoning": 0.70};
+      case "Column XOR":
+        return {"Inductive Reasoning": 0.25, "Deductive Reasoning": 0.70, "Quantitative Reasoning": 0.05};
+      default:
+        return {"Inductive Reasoning": 1/3, "Deductive Reasoning": 1/3, "Quantitative Reasoning": 1/3};
+    }
+  }
+
+  double adaptiveInductive(double indRaw, double dedRaw, double dedEvidence, double maxDedEvidence) {
+    final dedStrength = maxDedEvidence > 0 ? dedEvidence / maxDedEvidence : 0.0;
+    if (dedStrength < 0.4) {
+      return clamp01(0.95 * indRaw + 0.05 * dedRaw);
+    }
+    return clamp01(0.85 * indRaw + 0.15 * dedRaw);
+  }
+
+  final int n = [
+    itemDescriptions.length,
+    itemDifficulties.length,
+    itemResults.length,
+    itemTimesMs.length,
+  ].reduce(min);
+
   if (n <= 0) {
     return {
       "Inductive Reasoning": 0.0,
@@ -23,80 +63,110 @@ Map<String, double> gradeMatrixFromStats({
     };
   }
 
-  // ---- Metrics Buckets ----
-  double totalDiff = 0.0;
-  double correctWeighted = 0.0;
+  // Precompute accuracy
+  final accuracy = itemResults.where((r) => r).length / n;
 
-  double inductiveSum = 0.0, inductiveMax = 0.0;   // Rotation, Cyclic Pattern
-  double deductiveSum = 0.0, deductiveMax = 0.0;   // Sudoku Logic, Column XOR
-  double quantSum = 0.0, quantMax = 0.0;           // Subtraction, Arithmetic
+  double indEvidence = 0.0, maxIndEvidence = 0.0;
+  double dedEvidence = 0.0, maxDedEvidence = 0.0;
+  double quantEvidence = 0.0, maxQuantEvidence = 0.0;
+  int correctCount = 0;
 
   for (int i = 0; i < n; i++) {
-    final desc = itemDescriptions[i];
-    final w = itemDifficulties[i].toDouble();
-    final correct = itemResults[i];
+    final bool correct = itemResults[i];
+    final int difficulty = itemDifficulties[i];
+    final String desc = itemDescriptions[i];
+    final int timeMs = itemTimesMs[i].clamp(0, 15000);
 
-    totalDiff += w;
-    if (correct) correctWeighted += w;
+    // Raw difficulty weight (for max evidence)
+    final rawDiffW = difficultyWeight(difficulty);
+    // Adjusted weight (for evidence) - penalize guessed hard items
+    double adjustedDiffW = rawDiffW;
 
-    // 1. Inductive: Inferring rules from examples
-    if (desc == "Rotation" || desc == "Cyclic Pattern") {
-      inductiveMax += w;
-      if (correct) inductiveSum += w;
+    // CRITICAL FIX: Penalty applies ONLY to evidence, not max evidence
+    if (accuracy < 0.3 && timeMs < 1000 && difficulty >= 4) {
+      adjustedDiffW *= 0.1; // Crush evidence from guessed hard items
     }
 
-    // 2. Deductive: Applying strict logic constraints
-    if (desc == "Sudoku Logic (Unique Row/Col)" || desc == "Column XOR") {
-      deductiveMax += w;
-      if (correct) deductiveSum += w;
+    if (correct) correctCount++;
+
+    final weights = skillWeightsFor(desc);
+    final wInd = weights["Inductive Reasoning"]!;
+    final wDed = weights["Deductive Reasoning"]!;
+    final wQuant = weights["Quantitative Reasoning"]!;
+
+    double perf = 0.0;
+    if (correct) {
+      if (timeMs < 500) {
+        perf = 0.05; // Extreme spam penalty
+      } else if (timeMs < 1500) {
+        perf = 0.20; // Severe guessing penalty
+      } else {
+        final speedBonus = humanSpeedFactor(timeMs);
+        perf = 0.85 + 0.15 * speedBonus;
+      }
     }
 
-    // 3. Quantitative: Numeric operations
-    if (desc == "Subtraction" || desc == "Arithmetic") {
-      quantMax += w;
-      if (correct) quantSum += w;
-    }
+    // Evidence uses ADJUSTED weight
+    indEvidence += wInd * perf * adjustedDiffW;
+    dedEvidence += wDed * perf * adjustedDiffW;
+    quantEvidence += wQuant * perf * adjustedDiffW;
+
+    // Max evidence uses RAW weight (no penalty)
+    maxIndEvidence += wInd * 1.0 * rawDiffW;
+    maxDedEvidence += wDed * 1.0 * rawDiffW;
+    maxQuantEvidence += wQuant * 1.0 * rawDiffW;
   }
 
-  // Weighted Accuracy (Used to gate Speed)
-  final double overallWeightedAccuracy =
-  totalDiff <= 0.0 ? 0.0 : clamp01(correctWeighted / totalDiff);
+  final double indRaw = maxIndEvidence > 0 ? clamp01(indEvidence / maxIndEvidence) : 0.0;
+  final double dedRaw = maxDedEvidence > 0 ? clamp01(dedEvidence / maxDedEvidence) : 0.0;
+  final double quantRaw = maxQuantEvidence > 0 ? clamp01(quantEvidence / maxQuantEvidence) : 0.0;
 
-  // Category Scores
-  final double inductive =
-  inductiveMax <= 0.0 ? 0.0 : clamp01(inductiveSum / inductiveMax);
+  // Bayesian prior for Quantitative
+  double quantFinal;
+  if (correctCount > 0 && quantEvidence > 0) {
+    final prior = 0.85;
+    quantFinal = clamp01((prior + quantEvidence) / (prior + maxQuantEvidence));
+  } else {
+    quantFinal = quantRaw;
+  }
 
-  final double deductive =
-  deductiveMax <= 0.0 ? 0.0 : clamp01(deductiveSum / deductiveMax);
+  // IPS calculation
+  final List<int> rawTimes = List<int>.from(itemTimesMs);
+  rawTimes.sort();
+  final mid = rawTimes.length ~/ 2;
+  final medianMs = rawTimes.length.isOdd
+      ? rawTimes[mid].toDouble()
+      : (rawTimes[mid - 1] + rawTimes[mid]) / 2.0;
 
-  final double quantitative =
-  quantMax <= 0.0 ? 0.0 : clamp01(quantSum / quantMax);
+  double baseSpeed;
+  if (medianMs < 2000) {
+    baseSpeed = 0.80;
+  } else if (medianMs <= 4000) {
+    baseSpeed = 1.0;
+  } else if (medianMs >= 15000) {
+    baseSpeed = 0.5;
+  } else {
+    baseSpeed = 1.0 - ((medianMs - 4000) / 11000.0) * 0.5;
+  }
 
-  // ---- Information Processing Speed ----
-  // Logic: Speed is only valuable if you are correct.
-  // We calculate median time, normalize against the 15s limit,
-  // and multiply by accuracy so "fast guessing" gets a low score.
-  double informationProcessingSpeed = 0.0;
+  final double ips = clamp01(baseSpeed * sqrt(accuracy));
 
-  if (itemTimesMs.isNotEmpty) {
-    final times = itemTimesMs.take(n).toList();
-    times.sort();
-    final int mid = times.length ~/ 2;
-    final double medianMs = times.length.isOdd
-        ? times[mid].toDouble()
-        : ((times[mid - 1] + times[mid]) / 2.0);
+  final double inductiveFinal = adaptiveInductive(indRaw, dedRaw, dedEvidence, maxDedEvidence);
 
-    // 15 seconds (15000ms) is the limit per question
-    final double rawSpeed = clamp01(1.0 - (medianMs / 15000.0));
-
-    // Gate: Speed * Weighted Accuracy
-    informationProcessingSpeed = clamp01(rawSpeed * overallWeightedAccuracy);
+  // Final safety net: cap scores for extreme spammers
+  if (accuracy < 0.3 && medianMs < 500) {
+    return {
+      "Inductive Reasoning": min(inductiveFinal, 0.2),
+      "Deductive Reasoning": min(dedRaw, 0.25),
+      "Quantitative Reasoning": min(quantFinal, 0.2),
+      "Information Processing Speed": ips,
+    };
   }
 
   return {
-    "Inductive Reasoning": inductive,
-    "Deductive Reasoning": deductive,
-    "Quantitative Reasoning": quantitative,
-    "Information Processing Speed": informationProcessingSpeed,
+    "Inductive Reasoning": inductiveFinal,
+    "Deductive Reasoning": dedRaw,
+    "Quantitative Reasoning": quantFinal,
+    "Information Processing Speed": ips,
   };
 }
