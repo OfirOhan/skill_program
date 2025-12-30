@@ -15,6 +15,7 @@ class DigitShuffleWidget extends StatefulWidget {
 
 class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   final rand = Random();
+  List<int> _preGeneratedTaskTypes = []; // NEW: Pre-generated task types
 
   // Game State
   List<int> sequence = [];
@@ -56,6 +57,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
   @override
   void initState() {
     super.initState();
+    _generateTaskSequence(); // NEW: Pre-generate all task types
     _startRound();
   }
 
@@ -64,6 +66,30 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     _roundTimer?.cancel();
     _memoTimer?.cancel();
     super.dispose();
+  }
+
+  // NEW: Pre-generate task types with guaranteed coverage
+  void _generateTaskSequence() {
+    // Round 0 is ALWAYS Recall (task type 0)
+    _preGeneratedTaskTypes = [0];
+
+    // Rounds 1-4: Must contain at least one Sort (1) and one Add (2)
+    final remainingTasks = <int>[1, 2]; // Guarantee at least one Sort and one Add
+
+    // Fill remaining slots with random tasks (0,1,2)
+    while (remainingTasks.length < 4) {
+      remainingTasks.add(rand.nextInt(3));
+    }
+
+    // Shuffle the remaining tasks
+    remainingTasks.shuffle(rand);
+    _preGeneratedTaskTypes.addAll(remainingTasks);
+
+    // Final sequence has 5 rounds: [0, ...4 shuffled tasks with at least one 1 and one 2]
+    assert(_preGeneratedTaskTypes.length == 5);
+    assert(_preGeneratedTaskTypes[0] == 0);
+    assert(_preGeneratedTaskTypes.contains(1)); // At least one Sort
+    assert(_preGeneratedTaskTypes.contains(2)); // At least one Add
   }
 
   void _startRoundTimer() {
@@ -89,9 +115,8 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
 
     int count = 5 + (roundsPlayed >= 2 ? 1 : 0) + (roundsPlayed >= 4 ? 1 : 0);
 
-    int taskType = 0;
-    if (roundsPlayed == 0) taskType = 0;
-    else taskType = rand.nextInt(3);
+    // FIXED: Use pre-generated task type
+    final taskType = _preGeneratedTaskTypes[roundsPlayed];
 
     int addVal = 0;
     if (taskType == 2) addVal = rand.nextInt(3) + 1;
@@ -119,7 +144,7 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
         } else if (taskType == 1) {
           instruction = "Sort: Low to High";
           expected = List.from(sequence)..sort();
-          processTrials++; // you can keep this if you want, but it won’t be needed for grade()
+          processTrials++;
         } else {
           instruction = "Add $addVal to each!";
           expected = sequence.map((e) => e + addVal).toList();
@@ -209,8 +234,6 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,8 +249,8 @@ class _DigitShuffleWidgetState extends State<DigitShuffleWidget> {
               child: Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Text(
-                  "$roundSeconds s", // Assuming roundSeconds is the var
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: roundSeconds <= 5 ? Colors.red : Colors.indigo)
+                    "$roundSeconds s",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: roundSeconds <= 5 ? Colors.red : Colors.indigo)
                 ),
               ),
             ),
