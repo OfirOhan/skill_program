@@ -131,10 +131,8 @@ class _WordLadderGameState extends State<WordLadderGame> {
 
   Map<String, double> grade() {
     return WordLadderGrading.grade(
-      totalItems: items.length,
       results: itemCorrect,
       reactionTimes: itemTimesMs,
-      categories: items.map((e) => e.category).toList(),
     );
   }
 
