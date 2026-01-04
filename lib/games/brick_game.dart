@@ -3,18 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../grading/brick_grading.dart';
 
-// --- DATA & CONFIG (Preserved) ---
+// --- DATA & CONFIG ---
 
 // --- NEW: timing evidence (tracking only) ---
 int divergentUsedMs = 0;           // how long they actually brainstormed
 int convergentStartMs = 0;         // when decision phase begins
 int convergentDecisionMs = -1;     // time-to-pick within decision phase; -1 = no decision
-
-// --- HELPERS (Delegated to BrickHelpers in grading file) ---
-bool _containsRealWord(String idea) => BrickHelpers.containsRealWord(idea);
-
-List<String> _extractKeywords(String idea) => BrickHelpers.extractKeywords(idea);
-
 
 class BrickGame extends StatefulWidget {
   const BrickGame({Key? key}) : super(key: key);
@@ -44,8 +38,6 @@ class _BrickGameState extends State<BrickGame> {
   int divergentDuration = 45;
   int convergentDuration = 10;
   int startTime = 0;
-
-  final Map<String, int> keywordFrequency = {};
 
   @override
   void initState() {
@@ -104,12 +96,7 @@ class _BrickGameState extends State<BrickGame> {
       ideaTimestamps.insert(0, elapsed);
       ideaCount++;
       _textController.clear();
-
-      final kws = _extractKeywords(text);
-      if (kws.isNotEmpty) {
-        final primary = kws.first;
-        keywordFrequency[primary] = (keywordFrequency[primary] ?? 0) + 1;
-      }
+      // No keyword extraction needed here anymore
     });
   }
 
@@ -139,16 +126,19 @@ class _BrickGameState extends State<BrickGame> {
     setState(() => isGameOver = true);
   }
 
-  void _onSkipPressed() {
+  // Updated to be async
+  Future<void> _onSkipPressed() async {
     _timer?.cancel();
     HapticFeedback.lightImpact();
-    Navigator.of(context).pop(calculateScores());
+    final scores = await calculateScores();
+    if (!mounted) return;
+    Navigator.of(context).pop(scores);
   }
 
-  Map<String, double> calculateScores() {
-    return BrickGrading.grade(
+  // Updated to be async and call the new grade signature
+  Future<Map<String, double>> calculateScores() async {
+    return await BrickGrading.grade(
       ideas: ideas,
-      keywordFrequency: keywordFrequency,
       divergentDuration: divergentDuration,
       divergentUsedMs: divergentUsedMs,
       convergentChosen: convergentChosen,
@@ -158,11 +148,8 @@ class _BrickGameState extends State<BrickGame> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
-    // --- UPDATED RESULT SCREEN (White Theme) ---
     if (isGameOver) {
       return Scaffold(
         backgroundColor: Colors.white,
@@ -177,7 +164,12 @@ class _BrickGameState extends State<BrickGame> {
               Text("Ideas Generated: $ideaCount", style: const TextStyle(color: Colors.grey, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(calculateScores()),
+                // Updated to handle async result
+                onPressed: () async {
+                  final scores = await calculateScores();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop(scores);
+                },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
                 style: ElevatedButton.styleFrom(
@@ -206,12 +198,12 @@ class _BrickGameState extends State<BrickGame> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$currentSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: currentSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$currentSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: currentSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
