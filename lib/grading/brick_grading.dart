@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import '../secure/api_keys.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
 /// Internal holder for Gemini results
@@ -15,8 +16,7 @@ class _CreativityResult {
 
 class BrickGrading {
   // ⚠️ Put YOUR Gemini API key here (do NOT commit it to Git)
-  static const String _rawApiKey = "API-KEY";
-  static String get _apiKey => _rawApiKey.trim();
+  static String get _apiKey => ApiKeys.geminiApiKey.trim();
 
   // ---------------------------------------------------------------------------
   // PUBLIC ENTRY POINT

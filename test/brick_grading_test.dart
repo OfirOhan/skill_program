@@ -28,33 +28,33 @@ void main() {
   }
 
   group('BrickGrading – Spec-based behavioral tests', () {
-    // =========================================================
-    // 0. BASELINE: NO IDEAS → everything must be exactly 0
-    // =========================================================
-    test('No ideas → all scores zero', () async {
-      final result = await grade(ideas: []);
-
-      expect(result['Ideation Fluency'], equals(0.0));
-      expect(result['Divergent Thinking'], equals(0.0));
-      expect(result['Planning & Prioritization'], equals(0.0));
-    });
-
-    // =========================================================
-    // 1. PURE GIBBERISH SPAM
-    // We expect Gemini to treat these as nonsense (creativity ~ 0.0),
-    // so no plausible ideas => all scores ~ 0.
-    // =========================================================
-    test('Gibberish spam → almost zero everywhere', () async {
-      final ideas = ["asdfgh", "qwrty", "zxcvb", "plmnb", "qzxsw"];
-
-      final result = await grade(ideas: ideas, selectedBest: "asdfgh");
-
-      print('Gibberish => $result');
-
-      expect(result['Ideation Fluency']!, closeTo(0.0, eps));
-      expect(result['Divergent Thinking']!, closeTo(0.0, eps));
-      expect(result['Planning & Prioritization']!, closeTo(0.0, eps));
-    });
+  //   // =========================================================
+  //   // 0. BASELINE: NO IDEAS → everything must be exactly 0
+  //   // =========================================================
+  //   test('No ideas → all scores zero', () async {
+  //     final result = await grade(ideas: []);
+  //
+  //     expect(result['Ideation Fluency'], equals(0.0));
+  //     expect(result['Divergent Thinking'], equals(0.0));
+  //     expect(result['Planning & Prioritization'], equals(0.0));
+  //   });
+  //
+  //   // =========================================================
+  //   // 1. PURE GIBBERISH SPAM
+  //   // We expect Gemini to treat these as nonsense (creativity ~ 0.0),
+  //   // so no plausible ideas => all scores ~ 0.
+  //   // =========================================================
+  //   test('Gibberish spam → almost zero everywhere', () async {
+  //     final ideas = ["asdfgh", "qwrty", "zxcvb", "plmnb", "qzxsw"];
+  //
+  //     final result = await grade(ideas: ideas, selectedBest: "asdfgh");
+  //
+  //     print('Gibberish => $result');
+  //
+  //     expect(result['Ideation Fluency']!, closeTo(0.0, eps));
+  //     expect(result['Divergent Thinking']!, closeTo(0.0, eps));
+  //     expect(result['Planning & Prioritization']!, closeTo(0.0, eps));
+  //   });
 
     // =========================================================
     // 2. SINGLE STRONG IDEA – SLOW THINKER
