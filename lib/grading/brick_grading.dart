@@ -15,7 +15,7 @@ class _CreativityResult {
 
 class BrickGrading {
   // ⚠️ Put YOUR Gemini API key here (do NOT commit it to Git)
-  static const String _rawApiKey = "AIzaSyA8dwR_E2_KQYIJ-sBbM_eeb_U9kfjeD9k";
+  static const String _rawApiKey = "API-KEY";
   static String get _apiKey => _rawApiKey.trim();
 
   // ---------------------------------------------------------------------------
