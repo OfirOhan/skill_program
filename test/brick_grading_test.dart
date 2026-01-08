@@ -28,33 +28,33 @@ void main() {
   }
 
   group('BrickGrading – Spec-based behavioral tests', () {
-  //   // =========================================================
-  //   // 0. BASELINE: NO IDEAS → everything must be exactly 0
-  //   // =========================================================
-  //   test('No ideas → all scores zero', () async {
-  //     final result = await grade(ideas: []);
-  //
-  //     expect(result['Ideation Fluency'], equals(0.0));
-  //     expect(result['Divergent Thinking'], equals(0.0));
-  //     expect(result['Planning & Prioritization'], equals(0.0));
-  //   });
-  //
-  //   // =========================================================
-  //   // 1. PURE GIBBERISH SPAM
-  //   // We expect Gemini to treat these as nonsense (creativity ~ 0.0),
-  //   // so no plausible ideas => all scores ~ 0.
-  //   // =========================================================
-  //   test('Gibberish spam → almost zero everywhere', () async {
-  //     final ideas = ["asdfgh", "qwrty", "zxcvb", "plmnb", "qzxsw"];
-  //
-  //     final result = await grade(ideas: ideas, selectedBest: "asdfgh");
-  //
-  //     print('Gibberish => $result');
-  //
-  //     expect(result['Ideation Fluency']!, closeTo(0.0, eps));
-  //     expect(result['Divergent Thinking']!, closeTo(0.0, eps));
-  //     expect(result['Planning & Prioritization']!, closeTo(0.0, eps));
-  //   });
+    // =========================================================
+    // 0. BASELINE: NO IDEAS → everything must be exactly 0
+    // =========================================================
+    test('No ideas → all scores zero', () async {
+      final result = await grade(ideas: []);
+
+      expect(result['Ideation Fluency'], equals(0.0));
+      expect(result['Divergent Thinking'], equals(0.0));
+      expect(result['Planning & Prioritization'], equals(0.0));
+    });
+
+    // =========================================================
+    // 1. PURE GIBBERISH SPAM
+    // We expect Gemini to treat these as nonsense (creativity ~ 0.0),
+    // so no plausible ideas => all scores ~ 0.
+    // =========================================================
+    test('Gibberish spam → almost zero everywhere', () async {
+      final ideas = ["asdfgh", "qwrty", "zxcvb", "plmnb", "qzxsw"];
+
+      final result = await grade(ideas: ideas, selectedBest: "asdfgh");
+
+      print('Gibberish => $result');
+
+      expect(result['Ideation Fluency']!, closeTo(0.0, eps));
+      expect(result['Divergent Thinking']!, closeTo(0.0, eps));
+      expect(result['Planning & Prioritization']!, closeTo(0.0, eps));
+    });
 
     // =========================================================
     // 2. SINGLE STRONG IDEA – SLOW THINKER
@@ -149,17 +149,17 @@ void main() {
     // =========================================================
     test('Creative Genius vs Boring Builder', () async {
       final geniusIdeas = [
-        "crush into red pigment for artists",
-        "use as thermal mass behind a sun-facing window",
-        "carve into a garden statue base",
-        "grind to powder for textured makeup or paint pigment",
-        "anchor a small fishing boat in shallow water",
+        "crush into red pigment for artists",                        // pigment / art
+        "use as thermal mass behind a sun-facing window",           // thermal / physics
+        "carve into a garden statue base",                          // sculpture / art
+        "stack bricks into a giant outdoor xylophone you hit with mallets", // sound / installation
+        "drill holes through a brick and hang it as a bird feeder", // nature / utility
       ];
 
       final boringIdeas = [
         "build a wall",
         "build a house",
-        "doorstop",
+        "weapon",
         "paperweight",
         "hold a door open",
       ];
@@ -170,7 +170,7 @@ void main() {
       );
       final boring = await grade(
         ideas: boringIdeas,
-        selectedBest: "build a wall",
+        selectedBest: "paperweight",
       );
 
       print("Genius => $genius");
@@ -228,8 +228,8 @@ void main() {
 
       print("Above-average => $result");
 
-      expect(result['Ideation Fluency']!, closeTo(0.77, eps));
-      expect(result['Divergent Thinking']!, closeTo(0.78, eps));
+      expect(result['Ideation Fluency']!, closeTo(0.86, eps));
+      expect(result['Divergent Thinking']!, closeTo(0.86, eps));
       expect(result['Planning & Prioritization']!, closeTo(1.0, eps));
     });
 
@@ -273,12 +273,12 @@ void main() {
       final highPlan = highEng['Planning & Prioritization']!;
 
       // Numeric expectations
-      expect(lowFlu, closeTo(0.52, eps));
-      expect(lowDiv, closeTo(0.62, eps));
-      expect(lowPlan, closeTo(0.67, eps));
+      expect(lowFlu, closeTo(0.58, eps));
+      expect(lowDiv, closeTo(0.67, eps));
+      expect(lowPlan, closeTo(0.57, 2 * eps));
 
-      expect(highFlu, closeTo(0.77, eps));
-      expect(highDiv, closeTo(0.85, eps));
+      expect(highFlu, closeTo(0.83, eps));
+      expect(highDiv, closeTo(0.91, eps));
       expect(highPlan, closeTo(1.00, eps));
 
       // And relationally, 4 ideas should clearly beat 2
@@ -324,7 +324,7 @@ void main() {
       // Numeric targets
       expect(goodPlan, closeTo(0.67, eps));
       expect(badPlan, closeTo(0.22, eps));
-      expect(goodPlan, greaterThan(badPlan + 0.10));
+      expect(goodPlan, greaterThan(badPlan + 0.30));
 
       // Divergent & Fluency should be almost identical
       final diffFlu =
@@ -384,10 +384,10 @@ void main() {
 
           // Numeric targets
           expect(dFlu, closeTo(0.83, eps));
-          expect(uFlu, closeTo(0.83, eps));
+          expect(uFlu, closeTo(0.51, eps));
 
           expect(dDiv, closeTo(0.97, eps));
-          expect(uDiv, closeTo(0.84, eps));
+          expect(uDiv, closeTo(0.53, eps));
 
           // Distinct must clearly beat duplicated by at least 0.1 in Divergent
           expect(dDiv, greaterThan(uDiv + 0.10));

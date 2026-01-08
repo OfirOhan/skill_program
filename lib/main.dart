@@ -1,27 +1,22 @@
 // lib/main.dart
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'session_manager.dart'; // Ensure this file exists and is correct
+import 'session_manager.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // 🔒 Lock orientation to portrait for a consistent experience
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-
-  // 🎨 Set transparent status bar for immersive feel
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-
-  // Enable full screen mode
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-
   runApp(const MyApp());
 }
 
@@ -32,25 +27,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Cognitive Battery',
+      title: 'Career Alignment',
       theme: ThemeData(
-        primarySwatch: Colors.indigo,
+        brightness: Brightness.light,
+        primaryColor: const Color(0xFF3F2E9E),
+        scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
       ),
-      home: Theme(
-        data: ThemeData(
-          brightness: Brightness.dark,
-          primaryColor: const Color(0xFF3F51B5),
-          scaffoldBackgroundColor: const Color(0xFF0F172A),
-          textTheme: const TextTheme(
-            displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -1.0, color: Colors.white),
-            headlineSmall: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: Colors.white70),
-            bodyMedium: TextStyle(fontSize: 16, color: Colors.white60, height: 1.5),
-          ),
-          useMaterial3: true,
-        ),
-        child: const LandingScreen(),
-      ),
+      home: const LandingScreen(),
     );
   }
 }
@@ -60,237 +44,237 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine safe area padding for top/bottom
-    final padding = MediaQuery.of(context).padding;
-
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          // Deep, premium gradient background
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0F172A), // Slate 900
-              Color(0xFF1E1B4B), // Indigo 950
-              Color(0xFF312E81), // Indigo 900
-            ],
-            stops: [0.0, 0.6, 1.0],
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // 1. BACKGROUND PATTERN
+          Positioned.fill(
+            child: CustomPaint(
+              painter: DotGridPainter(),
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            // Background decorative elements (optional: subtle circles/glows)
-            Positioned(
-              top: -100,
-              right: -100,
-              child: Container(
-                width: 300,
-                height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.indigo.shade500.withOpacity(0.1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.indigo.shade500.withOpacity(0.1),
-                      blurRadius: 50,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -50,
-              left: -50,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.purple.shade500.withOpacity(0.1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.purple.shade500.withOpacity(0.1),
-                      blurRadius: 50,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
-            // Main Content
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Spacer(flex: 1),
-
-                    // Logo / Icon Section
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.indigo.shade900.withOpacity(0.5),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.psychology_alt_rounded,
-                          size: 80,
-                          color: Colors.indigoAccent,
-                        ),
-                      ),
+          // 2. MAIN CONTENT
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Hello, Candidate",
+                    style: TextStyle(
+                      color: Color(0xFF505050),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.5,
                     ),
-                    const SizedBox(height: 40),
+                  ),
 
-                    // Title & Subtitle
-                    Text(
-                      "Cognitive\nPerformance",
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.displayLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Comprehensive Assessment Battery",
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 24),
+                  const Spacer(flex: 3),
 
-                    // Info Badge
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.timer_outlined, size: 16, color: Colors.indigoAccent),
-                            SizedBox(width: 8),
-                            Text(
-                              "~6 Minutes  •  15 Micro-Games",
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const Spacer(flex: 2),
-
-                    // Skills Grid (Context)
-                    Text(
-                      "ASSESSING",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        letterSpacing: 2.0,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white.withOpacity(0.4),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  // --- Center Hero ---
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _SkillItem(icon: Icons.flash_on_rounded, label: "Speed"),
-                        _SkillItem(icon: Icons.lightbulb_rounded, label: "Logic"),
-                        _SkillItem(icon: Icons.memory_rounded, label: "Memory"),
-                        _SkillItem(icon: Icons.visibility_rounded, label: "Focus"),
+                        // THE CUSTOM ICON REPLACEMENT
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF3F2E9E).withOpacity(0.15),
+                                blurRadius: 60,
+                                spreadRadius: 20,
+                              ),
+                            ],
+                          ),
+                          // Using CustomPaint to draw your specific Hexagon icon
+                          child: Padding(
+                            padding: const EdgeInsets.all(28.0), // Padding ensures icon fits inside circle
+                            child: CustomPaint(
+                              painter: HexagonNetworkPainter(
+                                color: const Color(0xFF3F2E9E),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        const Text(
+                          "Discover Your\nTrue Potential",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
                       ],
                     ),
+                  ),
 
-                    const Spacer(flex: 2),
+                  const Spacer(flex: 4),
 
-                    // CTA Button
-                    ElevatedButton(
+                  // --- Bottom Button ---
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
                       onPressed: () {
-                        HapticFeedback.lightImpact(); // Subtle feedback
+                        HapticFeedback.mediumImpact();
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const SessionManager()),
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.indigo.shade900,
-                        elevation: 8,
-                        shadowColor: Colors.indigo.withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        backgroundColor: const Color(0xFF151030),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "START ASSESSMENT",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Icon(Icons.arrow_forward_rounded),
-                        ],
+                      child: const Text(
+                        "START ASSESSMENT",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// Helper Widget for Skill Icons
-class _SkillItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
+// --- BACKGROUND DOTS PAINTER ---
+class DotGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.05)
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
 
-  const _SkillItem({required this.icon, required this.label});
+    const double gap = 25.0;
+    final List<Offset> points = [];
+
+    for (double i = gap / 2; i < size.width; i += gap) {
+      for (double j = gap / 2; j < size.height; j += gap) {
+        points.add(Offset(i, j));
+      }
+    }
+    canvas.drawPoints(ui.PointMode.points, points, paint);
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: Colors.indigoAccent.shade100, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-              fontSize: 12, color: Colors.white54, fontWeight: FontWeight.w500),
-        ),
-      ],
-    );
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// --- NEW CUSTOM ICON PAINTER (The Hexagon Network) ---
+class HexagonNetworkPainter extends CustomPainter {
+  final Color color;
+  HexagonNetworkPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3.0 // Thickness of lines
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final dotPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // 1. Calculate the 6 vertices of the hexagon
+    final List<Offset> hexPoints = [];
+    for (int i = 0; i < 6; i++) {
+      // Start from angle -pi/2 (top) + (pi/3 * i)
+      // Actually standard pointy-top hex starts at -90deg (-pi/2)
+      // Flat-topped hex (like your image) starts at 0deg or 30deg depending on orientation.
+      // Your image has a point at the top.
+      double angle = (math.pi / 3) * i - (math.pi / 2); // -90 degrees start
+      hexPoints.add(Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      ));
+    }
+
+    // 2. Draw Outer Hexagon
+    final path = Path()..moveTo(hexPoints[0].dx, hexPoints[0].dy);
+    for (int i = 1; i < 6; i++) {
+      path.lineTo(hexPoints[i].dx, hexPoints[i].dy);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+
+    // 3. Draw Inner Connections (The "Network")
+    // Based on your image:
+    // Top(0) connects to Bottom-Right(2) and Bottom-Left(4)
+    // Bottom(3) connects to Top-Right(1) and Top-Left(5)
+    // Center point connects to all? Let's mimic the image closely:
+    // It looks like a projection of a cube or a star shape.
+
+    // Connecting every other point creates the internal triangle star
+    final innerPath = Path();
+    // Triangle 1 (0 -> 2 -> 4 -> 0)
+    innerPath.moveTo(hexPoints[0].dx, hexPoints[0].dy);
+    innerPath.lineTo(hexPoints[2].dx, hexPoints[2].dy);
+    innerPath.lineTo(hexPoints[4].dx, hexPoints[4].dy);
+    innerPath.close();
+
+    // Triangle 2 (1 -> 3 -> 5 -> 1)
+    innerPath.moveTo(hexPoints[1].dx, hexPoints[1].dy);
+    innerPath.lineTo(hexPoints[3].dx, hexPoints[3].dy);
+    innerPath.lineTo(hexPoints[5].dx, hexPoints[5].dy);
+    innerPath.close();
+
+    canvas.drawPath(innerPath, paint);
+
+    // Center point connection (vertical line down the middle?)
+    // Your image has a vertical line from Top(0) to Bottom(3)
+    canvas.drawLine(hexPoints[0], hexPoints[3], paint);
+
+    // 4. Draw Dots at vertices and intersections
+    double dotRadius = 4.0;
+
+    // Outer vertices
+    for (var point in hexPoints) {
+      canvas.drawCircle(point, dotRadius, dotPaint);
+    }
+
+    // Center dot
+    canvas.drawCircle(center, dotRadius, dotPaint);
+
+    // Calculate inner intersection points for extra detail (optional, adds realism)
+    // Midpoints between center and vertices?
+    // Let's stick to the main vertices and center for the clean look.
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
