@@ -116,82 +116,74 @@ class _BlinkDemoWidgetState extends State<BlinkDemoWidget> {
           Positioned.fill(child: Container(color: feedbackOverlay)),
 
         Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 1. Text Label
-              const Padding(
-                padding: EdgeInsets.only(bottom: 24.0),
-                child: Text(
-                  "DEMO: Watch for matches",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20),
+
+                // 2. The Grid (Matching your screenshot style)
+                SizedBox(
+                  height: 260,
+                  width: 260,
+                  child: GridView.count(
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    children: List.generate(9, (i) {
+                      final isActive = i == currentCell;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 100),
+                        decoration: BoxDecoration(
+                          color: isActive ? currentColor : inactiveColor,
+                          borderRadius: BorderRadius.circular(16), // Rounded corners
+                        ),
+                      );
+                    }),
                   ),
                 ),
-              ),
 
-              // 2. The Grid (Matching your screenshot style)
-              SizedBox(
-                height: 280,
-                width: 280,
-                child: GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  children: List.generate(9, (i) {
-                    final isActive = i == currentCell;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 100),
-                      decoration: BoxDecoration(
-                        color: isActive ? currentColor : inactiveColor,
-                        borderRadius: BorderRadius.circular(16), // Rounded corners
-                      ),
-                    );
-                  }),
-                ),
-              ),
+                const SizedBox(height: 30),
 
-              const SizedBox(height: 40),
-
-              // 3. The "MATCH!" Button
-              // Always visible, simulates a "dip" when pressed
-              AnimatedScale(
-                scale: isButtonPressed ? 0.95 : 1.0,
-                duration: const Duration(milliseconds: 100),
-                child: Container(
-                  width: 200, // Wide pill shape
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: buttonColor,
-                    borderRadius: BorderRadius.circular(30), // Pill shape
-                    boxShadow: [
-                      if (!isButtonPressed) // Shadow disappears when pressed
-                        BoxShadow(
-                          color: buttonColor.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        )
-                    ],
-                  ),
-                  child: const Center(
-                    child: Text(
-                      "MATCH!",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        letterSpacing: 1.0,
+                // 3. The "MATCH!" Button
+                // Always visible, simulates a "dip" when pressed
+                AnimatedScale(
+                  scale: isButtonPressed ? 0.95 : 1.0,
+                  duration: const Duration(milliseconds: 100),
+                  child: Container(
+                    width: 200, // Wide pill shape
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: buttonColor,
+                      borderRadius: BorderRadius.circular(30), // Pill shape
+                      boxShadow: [
+                        if (!isButtonPressed) // Shadow disappears when pressed
+                          BoxShadow(
+                            color: buttonColor.withOpacity(0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          )
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        "MATCH!",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ],

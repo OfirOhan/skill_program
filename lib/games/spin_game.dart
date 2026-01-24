@@ -102,11 +102,11 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
     _trialLimitMs.add(_roundLimitMs);
 
     if (isCorrect) correctCount++;
-    
+
     if (isCorrect) {
-       HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
     } else {
-       HapticFeedback.heavyImpact();
+      HapticFeedback.heavyImpact();
     }
 
     _showFeedback(isCorrect);
@@ -159,8 +159,8 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () {
-                   HapticFeedback.lightImpact();
-                   Navigator.of(context).pop(grade());
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
@@ -186,12 +186,12 @@ class _SpinGameState extends State<SpinGame> with TickerProviderStateMixin {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
@@ -346,11 +346,11 @@ class ObjectPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- CONTENT GENERATOR (LOGIC FIXED) ---
+// --- CONTENT GENERATOR (4 LEVELS) ---
 
 List<SpinLevel> _generateHardLevels() {
 
-  // SHAPE 1: "The Chair"
+  // SHAPE 1: "The Chair" (EASY)
   Object3D chair = _createPolycube([
     Point3D(0,0,0), Point3D(0,1,0), Point3D(0,2,0), // Vertical
     Point3D(1,0,0) // Horizontal Leg
@@ -362,14 +362,20 @@ List<SpinLevel> _generateHardLevels() {
     Point3D(1,1,0) // Horizontal Mid
   ]);
 
-  // SHAPE: "The Snake"
+  // SHAPE 2: "The Snake" (MEDIUM - new position)
   Object3D snake = _createPolycube([
     Point3D(0,0,0), Point3D(1,0,0), // Base
     Point3D(1,1,0), // Up
     Point3D(1,1,1)  // Forward (Z-axis)
   ]);
 
-  // SHAPE: "The Crank" (Replaces the symmetric Claw)
+  // SHAPE: "L-Shape" (NEW - Distractor for Snake, moderate difficulty)
+  Object3D lShape = _createPolycube([
+    Point3D(0,0,0), Point3D(1,0,0), Point3D(2,0,0), // Horizontal base
+    Point3D(0,1,0) // Vertical up
+  ]);
+
+  // SHAPE 3: "The Crank" (HARD - was level 3, now level 4)
   // This shape is CHIRAL (Asymmetric). Mirroring it creates a distinct object.
   // Shape: Up, Right, Forward.
   Object3D crank = _createPolycube([
@@ -377,6 +383,29 @@ List<SpinLevel> _generateHardLevels() {
     Point3D(0,1,0), // Up
     Point3D(1,1,0), // Right
     Point3D(1,1,1)  // Forward
+  ]);
+
+  // SHAPE: "The T-Plus" (NEW - medium difficulty, for level 2)
+  // T-shape but with extra block going back in Z
+  // Creates a 3D structure that's moderate to rotate
+  Object3D tPlus = _createPolycube([
+    Point3D(0,0,0), Point3D(0,1,0), Point3D(0,2,0), // Vertical stem
+    Point3D(1,1,0), // Right arm
+    Point3D(0,1,1)  // Back arm (Z-axis)
+  ]);
+
+  // SHAPE: "Corner Bracket" (Distractor for T-Plus)
+  Object3D cornerBracket = _createPolycube([
+    Point3D(0,0,0), Point3D(1,0,0), // Base
+    Point3D(0,1,0), Point3D(0,2,0)  // Vertical
+  ]);
+
+  // SHAPE: "Rotated T" (Challenging distractor - similar but different orientation)
+  // T-shape but lying down with arm in different axis
+  Object3D rotatedT = _createPolycube([
+    Point3D(0,0,0), Point3D(1,0,0), Point3D(2,0,0), // Horizontal base
+    Point3D(1,1,0), // Up from middle
+    Point3D(1,0,1)  // Back from middle (Z-axis)
   ]);
 
   Object3D mirror(Object3D obj) {
@@ -387,7 +416,7 @@ List<SpinLevel> _generateHardLevels() {
   }
 
   return [
-    // 1. THE CHAIR
+    // LEVEL 1: THE CHAIR (Easy)
     SpinLevel(
         chair,
         [tShape, chair, snake],
@@ -395,15 +424,25 @@ List<SpinLevel> _generateHardLevels() {
         1
     ),
 
-    // 2. THE SNAKE
+    // LEVEL 2: THE T-PLUS (Medium - NEW)
+    // T-shape with an extra arm in the Z dimension
+    // Tests 3D spatial reasoning with moderate complexity
+    SpinLevel(
+        tPlus,
+        [cornerBracket, tPlus, rotatedT],
+        [pi/3, pi, 5*pi/4], // Option 1 is Correct
+        1
+    ),
+
+    // LEVEL 3: THE SNAKE (Medium-Hard - was level 2)
     SpinLevel(
         snake,
-        [snake, mirror(snake), _createPolycube([Point3D(0,0,0), Point3D(1,0,0), Point3D(1,1,0), Point3D(0,1,0)])],
+        [snake, mirror(snake), lShape],
         [pi/2, pi/2, 0], // Option 0 is Correct
         0
     ),
 
-    // 3. THE CRANK (Fixed: Now asymmetric)
+    // LEVEL 4: THE CRANK (Hard - was level 3)
     SpinLevel(
         crank,
         [mirror(crank), crank, mirror(crank)], // Mirror is now logically WRONG

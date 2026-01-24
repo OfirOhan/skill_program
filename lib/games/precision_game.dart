@@ -41,7 +41,7 @@ class _PrecisionGameState extends State<PrecisionGame> {
   int levelsCompleted = 0;
 
   double _sumOffRate = 0.0;   // off-path samples / total samples (per level)
-  double _sumDevNorm = 0.0;   // avg deviation normalized by (pathWidth/2) (per level)
+  double _sumDevNorm = 0.0;   // avg deviation normalized by pathWidth (NEW!)
   int _metricLevels = 0;      // how many levels contributed evidence
 
   @override
@@ -59,7 +59,9 @@ class _PrecisionGameState extends State<PrecisionGame> {
   }
 
   void _startTimer() {
-    remainingSeconds = 15;
+    // Level 3 (index 2) gets 20 seconds, others get 15
+    remainingSeconds = (level == 2) ? 20 : 15;
+
     _levelTimer?.cancel();
     _levelTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
@@ -94,13 +96,13 @@ class _PrecisionGameState extends State<PrecisionGame> {
       levelCompleted = false;
 
       if (level == 0) {
-        pathWidth = 70.0;
+        pathWidth = 45.0;  // Narrower than original 70.0
         currentPathSpine = _generatePath(0, w, h);
       } else if (level == 1) {
-        pathWidth = 50.0;
+        pathWidth = 32.0;  // Narrower than original 50.0
         currentPathSpine = _generatePath(1, w, h);
       } else {
-        pathWidth = 35.0;
+        pathWidth = 24.0;  // Narrower than original 35.0
         currentPathSpine = _generatePath(2, w, h);
       }
     });
@@ -114,13 +116,16 @@ class _PrecisionGameState extends State<PrecisionGame> {
       final offRate = (touchCount / sampleCount).clamp(0.0, 1.0);
 
       final avgDevPx = totalDeviation / sampleCount;
-      final devNorm = (avgDevPx / max(1.0, (pathWidth / 2))).clamp(0.0, 1.0);
+
+      // CHANGED: Normalize by full pathWidth instead of pathWidth/2
+      // This makes edge of gray = 0.5 instead of 1.0
+      final devNorm = (avgDevPx / max(1.0, pathWidth)).clamp(0.0, 1.0);
 
       _sumOffRate += offRate;
       _sumDevNorm += devNorm;
       _metricLevels++;
     } else {
-      // If they barely touched / did nothing, treat as worst evidence (prevents “no input” exploits)
+      // If they barely touched / did nothing, treat as worst evidence (prevents "no input" exploits)
       _sumOffRate += 1.0;
       _sumDevNorm += 1.0;
       _metricLevels++;
@@ -180,7 +185,12 @@ class _PrecisionGameState extends State<PrecisionGame> {
       if (touchCount % 5 == 0) HapticFeedback.lightImpact(); // Subtle feedback on errors
     }
 
-    totalDeviation += minDistance;
+    // NEW: Deviation starts from edge of white line (perfect zone)
+    // White line width = 8px, so radius = 4px
+    const double whiteLineRadius = 4.0;
+    final deviationFromWhite = (minDistance - whiteLineRadius).clamp(0.0, double.infinity);
+
+    totalDeviation += deviationFromWhite;
     sampleCount++;
   }
 
@@ -257,8 +267,8 @@ class _PrecisionGameState extends State<PrecisionGame> {
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () {
-                   HapticFeedback.lightImpact();
-                   Navigator.of(context).pop(grade());
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
@@ -281,12 +291,12 @@ class _PrecisionGameState extends State<PrecisionGame> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
@@ -339,24 +349,25 @@ class PathPainter extends CustomPainter {
     }
     canvas.drawPath(path, roadPaint);
 
-    // 2. Draw Center Line
+    // 2. Draw Center Line (thicker now - the "perfect zone")
     final centerPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = 8;  // Thicker white line = perfect zone
     canvas.drawPath(path, centerPaint);
 
-    // 3. Draw Start & End
-    canvas.drawCircle(pathPoints.first, width/1.5, Paint()..color = Colors.green);
-    canvas.drawCircle(pathPoints.last, width/1.5, Paint()..color = Colors.redAccent);
+    // 3. Draw Start & End (fixed size regardless of path width)
+    const double circleRadius = 25.0;
+    canvas.drawCircle(pathPoints.first, circleRadius, Paint()..color = Colors.green);
+    canvas.drawCircle(pathPoints.last, circleRadius, Paint()..color = Colors.redAccent);
 
-    TextPainter(text: const TextSpan(text: "START", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)
+    TextPainter(text: const TextSpan(text: "START", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)), textDirection: TextDirection.ltr)
       ..layout()
-      ..paint(canvas, pathPoints.first - const Offset(20, 7));
+      ..paint(canvas, pathPoints.first - const Offset(18, 6));
 
-    TextPainter(text: const TextSpan(text: "END", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)
+    TextPainter(text: const TextSpan(text: "END", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)), textDirection: TextDirection.ltr)
       ..layout()
-      ..paint(canvas, pathPoints.last - const Offset(15, 7));
+      ..paint(canvas, pathPoints.last - const Offset(13, 6));
 
     // 4. Draw User Trace
     final tracePaint = Paint()

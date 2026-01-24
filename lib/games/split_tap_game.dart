@@ -20,12 +20,14 @@ class _SplitTapGameState extends State<SplitTapGame> {
   static const int _trialDurationMs = 1000; // 1 second per blink
   static const double _targetRatio = 0.3;   // 30% targets, 70% distractors
 
+  // Extra time ONLY on the first blink after a rule switch.
+  static const int _postSwitchExtraMs = 300; // +0.3s on post-switch trials
+
   late List<bool> _leftTrialPlan; // true = target, false = distractor
   int _trialIndex = 0;
 
-  // GAME TIME
-  DateTime? _gameStart;
-  double _gameDurationSeconds = 0.0;
+  // Precomputed rule-switch schedule: which trial indices start with a new rule
+  List<int> _switchIndices = [];
 
   // Displayed "time" – trials left (≈ seconds)
   int remainingSeconds = _totalTrials;
@@ -35,17 +37,14 @@ class _SplitTapGameState extends State<SplitTapGame> {
   // -- LEFT SIDE (Visual Logic) --
   Color currentStimulusColor = Colors.grey[200]!;
   Color targetColor = Colors.green;
+  late Color _prevTargetColor; // for rule-conflict detection
   String targetName = "GREEN";
 
   int leftHits = 0;
   int leftFalseAlarms = 0;
   int leftMisses = 0;
 
-  bool isTargetActive = false; // purely visual
-
-  // Rule Switching Counters
-  int flashesSeen = 0;
-  int flashesUntilRuleChange = 0; // 4–7 between switches
+  bool isTargetActive = false; // currently visual-only flag
 
   // -- RIGHT SIDE (Math) --
   String mathQuestion = "";
@@ -59,18 +58,16 @@ class _SplitTapGameState extends State<SplitTapGame> {
   bool _leftTrialWasTarget = false;
   bool _leftTrialResponded = false;
   bool _leftTrialIsPostSwitch = false;
+  bool _leftTrialIsRuleConflict = false;
 
   int _leftTargets = 0;
   int _leftDistractors = 0;
   int _leftHitsT = 0;
   int _leftCorrectRejections = 0;
 
-  // Instruction Adherence
-  int _postSwitchTrials = 0;
-  int _postSwitchCorrect = 0;
-
   final List<bool> _leftTrialCorrect = [];
   final List<bool> _leftTrialPostSwitch = [];
+  final List<bool> _leftTrialRuleConflict = [];
 
   // Tap feedback overlay
   bool _tapFeedbackActive = false;
@@ -87,7 +84,9 @@ class _SplitTapGameState extends State<SplitTapGame> {
   void initState() {
     super.initState();
     _buildLeftTrialPlan();
-    flashesUntilRuleChange = 4 + rand.nextInt(4);
+    _buildSwitchSchedule();
+    _enforceAtLeastOneConflictTarget();
+    _prevTargetColor = targetColor; // initial "old" rule same as current
     _startGame();
   }
 
@@ -106,6 +105,70 @@ class _SplitTapGameState extends State<SplitTapGame> {
     _leftTrialPlan.shuffle(rand);
   }
 
+  void _buildSwitchSchedule() {
+    _switchIndices = [];
+
+    // First switch not too early: somewhere between trials 4–6.
+    int idx = 4 + rand.nextInt(3); // 4,5,6
+    while (idx < _totalTrials) {
+      _switchIndices.add(idx);
+      // Next switches 4–7 trials apart
+      idx += 4 + rand.nextInt(4); // +4..+7
+    }
+
+    // Safety: if somehow empty, force one switch near the middle
+    if (_switchIndices.isEmpty) {
+      _switchIndices.add(_totalTrials ~/ 2);
+    }
+  }
+
+  /// Make sure that at least one post-switch trial is a TARGET,
+  /// so we are guaranteed to have at least one rule-conflict trial.
+  void _enforceAtLeastOneConflictTarget() {
+    if (_switchIndices.isEmpty) return;
+
+    // Pick one of the switch indices at random
+    final int switchIdx = _switchIndices[rand.nextInt(_switchIndices.length)];
+
+    if (_leftTrialPlan[switchIdx] == true) {
+      // Already a target -> guaranteed conflict; nothing to do.
+      return;
+    }
+
+    // Find a target trial that is NOT a switch trial to swap with
+    int swapIdx = -1;
+    for (int i = 0; i < _leftTrialPlan.length; i++) {
+      if (i == switchIdx) continue;
+      if (!_switchIndices.contains(i) && _leftTrialPlan[i] == true) {
+        swapIdx = i;
+        break;
+      }
+    }
+
+    // If we still didn't find a non-switch target (very unlikely),
+    // just use any other target index.
+    if (swapIdx == -1) {
+      for (int i = 0; i < _leftTrialPlan.length; i++) {
+        if (i == switchIdx) continue;
+        if (_leftTrialPlan[i] == true) {
+          swapIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (swapIdx == -1) {
+      // No targets at all (shouldn't happen with our ratio); just force one.
+      _leftTrialPlan[switchIdx] = true;
+      return;
+    }
+
+    // Swap values so total number of targets stays the same.
+    final bool tmp = _leftTrialPlan[switchIdx];
+    _leftTrialPlan[switchIdx] = _leftTrialPlan[swapIdx];
+    _leftTrialPlan[swapIdx] = tmp;
+  }
+
   @override
   void dispose() {
     _leftTimer?.cancel();
@@ -113,7 +176,6 @@ class _SplitTapGameState extends State<SplitTapGame> {
   }
 
   void _startGame() {
-    _gameStart = DateTime.now();
     _trialIndex = 0;
     remainingSeconds = _totalTrials;
 
@@ -123,13 +185,6 @@ class _SplitTapGameState extends State<SplitTapGame> {
 
   void _finishGame() {
     _leftTimer?.cancel();
-    final now = DateTime.now();
-    if (_gameStart != null) {
-      _gameDurationSeconds =
-          now.difference(_gameStart!).inMilliseconds / 1000.0;
-    } else {
-      _gameDurationSeconds = 0.0;
-    }
 
     setState(() {
       isGameOver = true;
@@ -151,14 +206,10 @@ class _SplitTapGameState extends State<SplitTapGame> {
       remainingSeconds = _totalTrials - _trialIndex;
     });
 
-    // RULE SWITCH CHECK
-    flashesSeen++;
-    bool didSwitch = false;
-    if (flashesSeen >= flashesUntilRuleChange) {
+    // RULE SWITCH CHECK (using precomputed schedule)
+    bool didSwitch = _switchIndices.contains(_trialIndex);
+    if (didSwitch) {
       _switchRule();
-      didSwitch = true;
-      flashesSeen = 0;
-      flashesUntilRuleChange = 4 + rand.nextInt(4);
     }
 
     final bool planIsTarget = _leftTrialPlan[_trialIndex];
@@ -173,18 +224,27 @@ class _SplitTapGameState extends State<SplitTapGame> {
         // TARGET TRIAL: color MUST be targetColor (to keep semantics clean)
         showTarget = true;
         nextColor = targetColor;
-        // If it equals previousColor, we accept that; the blink effect comes
-        // from the AnimatedContainer / glow, not necessarily a color change.
       } else {
-        // DISTRACTOR TRIAL: color must NOT be targetColor
+        // DISTRACTOR TRIAL: color must NOT be targetColor or previousColor
         showTarget = false;
 
         var distractor = colorPalette[rand.nextInt(colorPalette.length)];
-        while (distractor['color'] == targetColor ||
-            distractor['color'] == previousColor) {
+        int safety = 0;
+        while ((distractor['color'] == targetColor ||
+            distractor['color'] == previousColor) &&
+            safety < 10) {
           distractor = colorPalette[rand.nextInt(colorPalette.length)];
+          safety++;
         }
         nextColor = distractor['color'];
+      }
+
+      // --- RULE-CONFLICT FLAG (only meaningful on post-switch trial) ---
+      bool isRuleConflict = false;
+      if (didSwitch) {
+        final bool shouldTapOld = (nextColor == _prevTargetColor);
+        final bool shouldTapNew = (nextColor == targetColor);
+        isRuleConflict = (shouldTapOld != shouldTapNew);
       }
 
       currentStimulusColor = nextColor;
@@ -194,11 +254,18 @@ class _SplitTapGameState extends State<SplitTapGame> {
       _leftTrialWasTarget = planIsTarget; // aligned with plan
       _leftTrialResponded = false;
       _leftTrialIsPostSwitch = didSwitch;
+      _leftTrialIsRuleConflict = isRuleConflict;
     });
 
+    // Trial duration: normal vs first after switch.
+    final int thisTrialDurationMs =
+    didSwitch ? _trialDurationMs + _postSwitchExtraMs : _trialDurationMs;
+
     _leftTimer?.cancel();
-    _leftTimer =
-        Timer(const Duration(milliseconds: _trialDurationMs), _closeTrialAndScheduleNext);
+    _leftTimer = Timer(
+      Duration(milliseconds: thisTrialDurationMs),
+      _closeTrialAndScheduleNext,
+    );
   }
 
   void _closeTrialAndScheduleNext() {
@@ -210,6 +277,9 @@ class _SplitTapGameState extends State<SplitTapGame> {
   }
 
   void _switchRule() {
+    // Remember old target for conflict detection
+    _prevTargetColor = targetColor;
+
     var newTarget = colorPalette[rand.nextInt(colorPalette.length)];
     while (newTarget['color'] == targetColor) {
       newTarget = colorPalette[rand.nextInt(colorPalette.length)];
@@ -243,15 +313,9 @@ class _SplitTapGameState extends State<SplitTapGame> {
       }
     }
 
-    if (_leftTrialIsPostSwitch) {
-      _postSwitchTrials++;
-      if (correct) {
-        _postSwitchCorrect++;
-      }
-    }
-
     _leftTrialCorrect.add(correct);
     _leftTrialPostSwitch.add(_leftTrialIsPostSwitch);
+    _leftTrialRuleConflict.add(_leftTrialIsRuleConflict);
 
     _hasActiveLeftTrial = false;
   }
@@ -297,33 +361,35 @@ class _SplitTapGameState extends State<SplitTapGame> {
   }
 
   // ---------------- RIGHT: MATH STREAM ----------------
+  //
+  // Very easy: single digit add/sub only, small offsets on distractors.
 
   void _nextMathProblem() {
-    final int op = rand.nextInt(3); // 0: Add, 1: Sub, 2: Mult
+    final int op = rand.nextInt(2); // 0: Add, 1: Sub
     int a, b, correct;
     String sign;
 
     if (op == 0) {
-      a = rand.nextInt(20) + 5;
-      b = rand.nextInt(20) + 5;
+      // Easy addition: 1–9 + 1–9 (2..18)
+      a = rand.nextInt(9) + 1;
+      b = rand.nextInt(9) + 1;
       correct = a + b;
       sign = "+";
-    } else if (op == 1) {
-      a = rand.nextInt(20) + 10;
-      b = rand.nextInt(a - 1) + 1;
+    } else {
+      // Easy subtraction: a - b, 0–9, result >= 0
+      a = rand.nextInt(10); // 0..9
+      b = rand.nextInt(a + 1); // 0..a
       correct = a - b;
       sign = "-";
-    } else {
-      a = rand.nextInt(9) + 2;
-      b = rand.nextInt(9) + 2;
-      correct = a * b;
-      sign = "×";
     }
 
     final Set<int> opts = {correct};
     while (opts.length < 3) {
-      final int offset = rand.nextInt(5) + 1;
-      opts.add(rand.nextBool() ? correct + offset : correct - offset);
+      final int delta = rand.nextInt(3) + 1; // 1..3
+      final bool add = rand.nextBool();
+      int candidate = add ? correct + delta : correct - delta;
+      if (candidate < 0) candidate = correct + delta;
+      opts.add(candidate);
     }
 
     setState(() {
@@ -356,11 +422,9 @@ class _SplitTapGameState extends State<SplitTapGame> {
       leftCorrectRejections: _leftCorrectRejections,
       leftTrialCorrect: _leftTrialCorrect,
       leftTrialPostSwitch: _leftTrialPostSwitch,
-      postSwitchTrials: _postSwitchTrials,
-      postSwitchCorrect: _postSwitchCorrect,
+      leftTrialRuleConflict: _leftTrialRuleConflict,
       mathHits: mathHits,
       mathWrongs: mathWrongs,
-      gameSeconds: _gameDurationSeconds,
     );
   }
 

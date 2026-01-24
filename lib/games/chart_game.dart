@@ -53,8 +53,10 @@ class _ChartDashGameState extends State<ChartDashGame> {
 
     // Dynamic Time Limit based on difficulty
     int timeLimit = 15;
-    if (index == 1) timeLimit = 25; // Moderate (Math involved)
-    if (index == 2) timeLimit = 35; // Hard (Complex Logic)
+    if (index == 1) timeLimit = 15; // Moderate (Trend identification)
+    if (index == 2) timeLimit = 25; // Moderate-Hard (Math calculation)
+    if (index == 3) timeLimit = 30; // Hard (Revenue puzzle)
+    if (index == 4) timeLimit = 35; // Very Hard (Multi-step average)
     _currentLimitMs = timeLimit * 1000;
     setState(() {
       remainingSeconds = timeLimit;
@@ -91,7 +93,7 @@ class _ChartDashGameState extends State<ChartDashGame> {
   }
 
   void _onOptionSelected(int optionIndex) {
-    HapticFeedback.lightImpact(); // Slection feedback
+    HapticFeedback.lightImpact(); // Selection feedback
     if (isGameOver || feedbackColor != null) return;
     _roundTimer?.cancel();
 
@@ -107,9 +109,9 @@ class _ChartDashGameState extends State<ChartDashGame> {
     if (isCorrect) correctCount++;
 
     if (isCorrect) {
-       HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
     } else {
-       HapticFeedback.heavyImpact();
+      HapticFeedback.heavyImpact();
     }
 
     _showFeedback(isCorrect);
@@ -143,8 +145,8 @@ class _ChartDashGameState extends State<ChartDashGame> {
       _qLimitMs.length,
     ].reduce((a, b) => a < b ? a : b);
 
-    // Construct math question identifier matching original logic (idx 1 and 2 are math)
-    final List<bool> isMath = List.generate(n, (i) => i == 1 || i == 2);
+    // Questions 2, 3, and 4 (indices 2, 3, 4) are math questions
+    final List<bool> isMath = List.generate(n, (i) => i >= 2);
 
     return ChartGrading.grade(
       results: _qCorrect.take(n).toList(),
@@ -172,8 +174,8 @@ class _ChartDashGameState extends State<ChartDashGame> {
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () {
-                   HapticFeedback.lightImpact();
-                   Navigator.of(context).pop(grade());
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
@@ -198,12 +200,12 @@ class _ChartDashGameState extends State<ChartDashGame> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
@@ -318,9 +320,8 @@ class ChartQuestion {
 List<ChartQuestion> _generateQuestions() {
   return [
     // LEVEL 1: EASY (15s)
-    // Task: Simple comparison + slight calculation
+    // Task: Simple comparison
     // Q: Which department had the LOWEST expense?
-    // Data: 120, 90, 150, 60
     ChartQuestion(
       type: ChartType.bar,
       question: "Which Dept spent the LEAST?",
@@ -330,11 +331,23 @@ List<ChartQuestion> _generateQuestions() {
       correctIndex: 3, // OPS (60)
     ),
 
-    // LEVEL 2: MODERATE (25s)
-    // Task: Percentage Growth Calculation
-    // Q: Calculate approx. % Growth from Feb to Mar.
-    // Feb: 40. Mar: 60.
-    // Formula: (60-40)/40 = 20/40 = 50%.
+    // LEVEL 2: MODERATE (15s)
+    // Task: Identify trend/growth
+    // Q: Which month had the HIGHEST growth?
+    // Jan→Feb: +10, Feb→Mar: +30 (HIGHEST), Mar→Apr: +5, Apr→May: +15
+    ChartQuestion(
+      type: ChartType.line,
+      question: "Which month had the HIGHEST growth?",
+      dataPoints: [40, 50, 80, 85, 100],
+      labels: ["Jan", "Feb", "Mar", "Apr", "May"],
+      options: ["Feb", "Mar", "Apr", "May"],
+      correctIndex: 1, // Mar (+30)
+    ),
+
+    // LEVEL 3: MODERATE-HARD (25s)
+    // Task: Percentage calculation
+    // Feb: 40, Mar: 60
+    // Formula: (60-40)/40 = 50%
     ChartQuestion(
       type: ChartType.line,
       question: "Calculate % Growth from Feb to Mar:",
@@ -344,21 +357,38 @@ List<ChartQuestion> _generateQuestions() {
       correctIndex: 2, // 50%
     ),
 
-    // LEVEL 3: HARD (35s)
-    // Task: Ratio / Logic Puzzle
-    // Q: If Revenue = Units * Price, which product earned the most?
-    // Bars show Units. Price is given in text.
+    // LEVEL 4: HARD (30s)
+    // Task: Multiplication puzzle
     // A (100u @ $2) = $200
-    // B (50u  @ $5) = $250 <-- Winner
-    // C (80u  @ $3) = $240
+    // B (50u @ $5) = $250 <-- Winner
+    // C (80u @ $3) = $240
     // D (200u @ $1) = $200
     ChartQuestion(
       type: ChartType.bar,
       question: "If Price is:\nA=\$2, B=\$5, C=\$3, D=\$1\nWhich earned highest revenue?",
-      dataPoints: [100, 50, 80, 200], // Units sold
+      dataPoints: [100, 50, 80, 200],
       labels: ["A", "B", "C", "D"],
       options: ["Product A", "Product B", "Product C", "Product D"],
       correctIndex: 1, // B ($250)
+    ),
+
+// LEVEL 5 ALTERNATIVE: RATIO NIGHTMARE (35s)
+// Task: Weighted average with ratios
+// Q: Team A (3 people) averages 80 units. Team B (2 people) averages 90 units.
+//    What's the OVERALL average per person?
+// Calculation:
+// Team A total: 3 × 80 = 240
+// Team B total: 2 × 90 = 180
+// Total people: 3 + 2 = 5
+// Overall avg: (240 + 180) / 5 = 420 / 5 = 84
+// Chart shows: [80, 90] (Team A avg, Team B avg)
+    ChartQuestion(
+      type: ChartType.bar,
+      question: "Team A (3 people) avg 80.\nTeam B (2 people) avg 90.\nOverall avg per person?",
+      dataPoints: [80, 90],
+      labels: ["Team A", "Team B"],
+      options: ["84", "85", "86", "88"],
+      correctIndex: 0, // 84
     ),
   ];
 }

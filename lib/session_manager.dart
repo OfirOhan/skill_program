@@ -178,7 +178,7 @@ class _SessionManagerState extends State<SessionManager> {
       demoWidget: PlanPushDemoWidget(),
     ),
     const GameIntroScreen(
-      title: "15. Stress Sprint",
+      title: "15. Word Group",
       icon: Icons.timer_off,
       instruction:
       "Math under pressure.",

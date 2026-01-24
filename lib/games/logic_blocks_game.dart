@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // REQUIRED FOR HAPTICS & SOUND
+import 'package:flutter/services.dart';
 import '../grading/logic_blocks_grading.dart';
 
 class LogicBlocksGame extends StatefulWidget {
@@ -16,29 +16,32 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   late List<List<PipeTile>> grid;
   int gridSize = 3;
   bool isGameOver = false;
-
-  // Lock to prevent double-winning
   bool isProcessingWin = false;
 
   static const int totalLevels = 3;
   int currentLevelIndex = 0;
 
   Timer? _levelTimer;
-  int remainingSeconds = 15;
+  int remainingSeconds = 20;
 
   int levelsSolved = 0;
   int moves = 0;
 
-  // --- NEW: per-level evidence (tracking only) ---
+  // --- TRACKING VARIABLES ---
   int _levelStartMs = 0;
   int _levelMoves = 0;
+  int _optimalMoves = 0;
+
   final Map<int, int> _tileTapCounts = {}; // key = r*gridSize + c
 
+  // Per-level results
   final List<int> _playedGridSizes = [];
   final List<bool> _levelSolved = [];
   final List<int> _levelTimeMs = [];
   final List<int> _levelMovesList = [];
   final List<int> _levelWastedCycles = [];
+  final List<int> _levelOptimalMoves = [];
+  final List<int> _levelMaxPathLength = [];
 
   @override
   void initState() {
@@ -55,13 +58,91 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   int _computeWastedCycles() {
     int cycles = 0;
     for (final c in _tileTapCounts.values) {
-      cycles += (c ~/ 4); // 4 taps returns to same rotation => definite wasted loop(s)
+      cycles += (c ~/ 4);
     }
     return cycles;
   }
 
+  int _computeMaxPathLength() {
+    // Find the longest correct path from EITHER source or drain
+    // This handles both forward solving (source → drain) and backward solving (drain → source)
+    int maxFromSource = _computePathLengthFrom(0, 0);
+    int maxFromDrain = _computePathLengthFrom(gridSize - 1, gridSize - 1);
+
+    // Return the better of the two
+    return max(maxFromSource, maxFromDrain);
+  }
+
+  int _computePathLengthFrom(int startR, int startC) {
+    // DFS to find longest valid pipe path from a starting position
+    List<List<bool>> visited = List.generate(gridSize, (_) => List.filled(gridSize, false));
+    int maxDepth = 0;
+
+    void dfs(int r, int c, int depth) {
+      if (r < 0 || r >= gridSize || c < 0 || c >= gridSize || visited[r][c]) {
+        return;
+      }
+
+      visited[r][c] = true;
+      maxDepth = max(maxDepth, depth);
+
+      PipeTile current = grid[r][c];
+
+      // Check all 4 directions
+      List<Point<int>> neighbors = [
+        Point(r - 1, c), // up
+        Point(r, c + 1), // right
+        Point(r + 1, c), // down
+        Point(r, c - 1), // left
+      ];
+
+      for (int dir = 0; dir < 4; dir++) {
+        Point<int> next = neighbors[dir];
+        if (next.x >= 0 && next.x < gridSize && next.y >= 0 && next.y < gridSize) {
+          PipeTile neighbor = grid[next.x][next.y];
+          if (_isConnected(current, neighbor, Point(r, c), next)) {
+            dfs(next.x, next.y, depth + 1);
+          }
+        }
+      }
+
+      visited[r][c] = false;
+    }
+
+    dfs(startR, startC, 0);
+    return maxDepth;
+  }
+
+  int _calculateOptimalMoves() {
+    // Count how many tiles need to be rotated from their current (scrambled) state
+    // to reach the correct solution
+    int needed = 0;
+
+    for (int r = 0; r < gridSize; r++) {
+      for (int c = 0; c < gridSize; c++) {
+        PipeTile tile = grid[r][c];
+        if (tile.type == PipeType.empty) continue;
+
+        // For each tile, the optimal is the minimum rotations needed
+        // Since we randomized them, we assume on average tiles need 1-2 rotations
+        // Cross pieces can stay at any rotation (0 moves needed)
+        if (tile.type == PipeType.cross) {
+          continue; // Cross doesn't need rotation
+        } else if (tile.type == PipeType.straight) {
+          // Straight pieces have 2 equivalent states (0° and 90° are same, 180° and 270° are same)
+          needed += 1; // Average case
+        } else {
+          // Elbow and Tee have specific correct orientations
+          needed += 1; // Conservative estimate
+        }
+      }
+    }
+
+    return max(needed, gridSize); // At minimum, need moves equal to grid size
+  }
+
   void _recordLevelResult({required bool solved}) {
-    final int limitMs = remainingSeconds <= 0 ? 15000 : 15000; // fixed level limit
+    final int limitMs = 20000;
     final int now = DateTime.now().millisecondsSinceEpoch;
 
     final int timeTaken = solved
@@ -73,10 +154,12 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
     _levelTimeMs.add(timeTaken);
     _levelMovesList.add(_levelMoves);
     _levelWastedCycles.add(_computeWastedCycles());
+    _levelOptimalMoves.add(_optimalMoves);
+    _levelMaxPathLength.add(_computeMaxPathLength());
   }
 
   void _startTimer() {
-    remainingSeconds = 15;
+    remainingSeconds = 20;
     _levelTimer?.cancel();
     _levelTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       setState(() => remainingSeconds--);
@@ -113,7 +196,7 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   }
 
   void _startLevel() {
-    isProcessingWin = false; // Unlock for new level
+    isProcessingWin = false;
 
     if (currentLevelIndex >= totalLevels) {
       _finishGame();
@@ -141,9 +224,11 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
         }
       }
     }
+
     _levelStartMs = DateTime.now().millisecondsSinceEpoch;
     _levelMoves = 0;
     _tileTapCounts.clear();
+    _optimalMoves = _calculateOptimalMoves();
 
     _checkFlow();
     _startTimer();
@@ -152,18 +237,16 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
   void _onTileTap(int r, int c) {
     if (isGameOver || isProcessingWin) return;
 
-    // --- FEEDBACK SECTION ---
-    // 1. Vibration (Requires real device + permission)
     HapticFeedback.lightImpact();
-
-    // 2. Sound (System "Click" sound)
-    // SystemSound.play(SystemSoundType.click); // Removed to avoid double feedback or keep audio logic separate
-    // ------------------------
 
     setState(() {
       _levelMoves++;
       final key = r * gridSize + c;
+
+      // Track tap counts for wasted cycles
       _tileTapCounts[key] = (_tileTapCounts[key] ?? 0) + 1;
+
+      // Rotate the tile
       grid[r][c].rotation = (grid[r][c].rotation + 1) % 4;
       moves++;
     });
@@ -211,9 +294,8 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
 
   void _triggerWin() {
     if (isProcessingWin) return;
-    isProcessingWin = true; // LOCK
+    isProcessingWin = true;
     _recordLevelResult(solved: true);
-    // Optional: Win Sound/Vibration
     HapticFeedback.vibrate();
 
     _levelTimer?.cancel();
@@ -253,10 +335,10 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
       levelTimeMs: _levelTimeMs,
       levelMovesList: _levelMovesList,
       levelWastedCycles: _levelWastedCycles,
+      levelOptimalMoves: _levelOptimalMoves,
+      levelMaxPathLength: _levelMaxPathLength,
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -302,12 +384,12 @@ class _LogicBlocksGameState extends State<LogicBlocksGame> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
