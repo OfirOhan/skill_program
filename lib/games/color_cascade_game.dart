@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../grading/color_cascade_grading.dart';
+
 class ColorCascadeGame extends StatefulWidget {
   const ColorCascadeGame({Key? key}) : super(key: key);
 
@@ -20,23 +21,24 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   late ColorBase baseColor;
   List<Color> tiles = [];
   List<Color> reorderableList = [];
-  int? oddOneIndex;
+  Set<int> oddTileIndices = {}; // Track both odd tiles
+  Set<int> foundTiles = {}; // Track which odd tiles user has found
 
   // Timer
   Timer? _roundTimer;
   int remainingSeconds = 20;
   int startMs = 0;
 
-  // Metrics
-  int totalCorrect = 0;
-  double totalPrecision = 0.0;
+  // Metrics - PER ROUND TRACKING
+  List<bool> roundPerfect = [];      // Track which rounds were perfect
+  List<double> roundPrecision = [];  // Track precision score per round
   List<int> reactionTimes = [];
 
   // Feedback
   Color? feedbackColor;
   String? feedbackText;
 
-  static const int _timeoutPenaltyMs = 25000; // treat no-answer as very slow
+  static const int _timeoutPenaltyMs = 25000;
 
   @override
   void initState() {
@@ -65,61 +67,74 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
       // Reset Data
       tiles = [];
       reorderableList = [];
+      oddTileIndices.clear();
+      foundTiles.clear();
       baseColor = _randomBaseColor();
 
       if (level == 0) {
         // ROUND 1: Sort 7 items (Extremely Subtle Gradient)
-        // Increased count to 7, reduced variance to 0.2 (very tight steps)
         reorderableList = _generateGradient(baseColor, 7, variance: 0.2);
         reorderableList.shuffle();
       }
       else if (level == 1) {
-        // ROUND 2: 4x4 Grid (3% Diff - Was 4%)
+        // ROUND 2: 4x4 Grid (3% Diff) - Find 2 odd tiles
         int count = 16;
         tiles = List.filled(count, baseColor.color);
-        oddOneIndex = Random().nextInt(count);
+
+        // Pick 2 random positions for odd tiles
+        List<int> positions = List.generate(count, (i) => i);
+        positions.shuffle();
+        oddTileIndices.add(positions[0]);
+        oddTileIndices.add(positions[1]);
 
         double l = HSLColor.fromColor(baseColor.color).lightness;
         double diff = 0.03;
-
         double newL = (l > 0.5) ? l - diff : l + diff;
+
         tiles = List.generate(count, (i) {
-          if (i == oddOneIndex) {
+          if (oddTileIndices.contains(i)) {
             return HSLColor.fromColor(baseColor.color).withLightness(newL.clamp(0.0, 1.0)).toColor();
           }
           return baseColor.color;
         });
       }
       else if (level == 2) {
-        // ROUND 3: 5x5 Grid (1.5% Diff - Was 3%)
+        // ROUND 3: 5x5 Grid (1.5% Diff) - Find 2 odd tiles
         int count = 25;
         tiles = List.filled(count, baseColor.color);
-        oddOneIndex = Random().nextInt(count);
+
+        List<int> positions = List.generate(count, (i) => i);
+        positions.shuffle();
+        oddTileIndices.add(positions[0]);
+        oddTileIndices.add(positions[1]);
 
         double l = HSLColor.fromColor(baseColor.color).lightness;
         double diff = 0.015;
         double newL = (l > 0.5) ? l - diff : l + diff;
 
         tiles = List.generate(count, (i) {
-          if (i == oddOneIndex) {
+          if (oddTileIndices.contains(i)) {
             return HSLColor.fromColor(baseColor.color).withLightness(newL.clamp(0.0, 1.0)).toColor();
           }
           return baseColor.color;
         });
       }
       else {
-        // ROUND 4: 6x6 Grid (0.8% Diff - Was 1.5%)
-        // This is nearly impossible on standard screens
+        // ROUND 4: 6x6 Grid (1.0% Diff) - Find 2 odd tiles
         int count = 36;
         tiles = List.filled(count, baseColor.color);
-        oddOneIndex = Random().nextInt(count);
+
+        List<int> positions = List.generate(count, (i) => i);
+        positions.shuffle();
+        oddTileIndices.add(positions[0]);
+        oddTileIndices.add(positions[1]);
 
         double l = HSLColor.fromColor(baseColor.color).lightness;
-        double diff = 0.008;
+        double diff = 0.01;
         double newL = (l > 0.5) ? l - diff : l + diff;
 
         tiles = List.generate(count, (i) {
-          if (i == oddOneIndex) {
+          if (oddTileIndices.contains(i)) {
             return HSLColor.fromColor(baseColor.color).withLightness(newL.clamp(0.0, 1.0)).toColor();
           }
           return baseColor.color;
@@ -139,8 +154,10 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   void _handleTimeout() {
     _roundTimer?.cancel();
 
-    // record a speed penalty for "no answer"
+    // Record timeout for this round
     reactionTimes.add(_timeoutPenaltyMs);
+    roundPerfect.add(false);
+    roundPrecision.add(0.0);
 
     _showFeedback(false, isTimeout: true);
   }
@@ -158,49 +175,99 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
     final rt = DateTime.now().millisecondsSinceEpoch - startMs;
     reactionTimes.add(rt);
 
-    double score = 0;
-    int checks = reorderableList.length - 1;
+    // Count correct pairs (neighbors in correct order)
+    int correctPairs = 0;
+    int totalPairs = reorderableList.length - 1; // 6 pairs for 7 tiles
 
-    for (int i = 0; i < checks; i++) {
-      if (reorderableList[i].computeLuminance() >= reorderableList[i+1].computeLuminance() - 0.0001) {
-        score++;
+    for (int i = 0; i < totalPairs; i++) {
+      if (reorderableList[i].computeLuminance() >=
+          reorderableList[i+1].computeLuminance() - 0.0001) {
+        correctPairs++;
       }
     }
 
-    bool perfect = score == checks;
+    bool perfect = (correctPairs == totalPairs);
+    double precision;
+
     if (perfect) {
-      totalCorrect++;
-      totalPrecision += 1.0;
+      // Perfect: 1.0
+      precision = 1.0;
+    } else if (correctPairs >= 3) {
+      // Partial credit only if at least 3 pairs correct (50%+)
+      // Accelerating penalties: first mistake hurts, then gets worse
+
+      if (correctPairs == 5) {
+        precision = 0.80; // -20% for first mistake
+      } else if (correctPairs == 4) {
+        precision = 0.55; // -25% additional (45% total from perfect)
+      } else { // correctPairs == 3
+        precision = 0.30; // -25% additional (70% total from perfect)
+      }
+    } else {
+      // Less than 3 pairs correct (< 50%) = no partial credit
+      precision = 0.0;
+    }
+
+    // Store per-round data
+    roundPrecision.add(precision);
+    roundPerfect.add(perfect);
+
+    if (perfect) {
       HapticFeedback.mediumImpact();
       _showFeedback(true);
     } else {
-      totalPrecision += (score / checks);
       HapticFeedback.heavyImpact();
       _showFeedback(false);
     }
   }
-
 
   // --- ROUND 2/3/4 LOGIC (Grid Tap) ---
   void _onGridTap(int index) {
     if (isGameOver || feedbackColor != null) return;
-    _roundTimer?.cancel();
     HapticFeedback.lightImpact();
 
-    final rt = DateTime.now().millisecondsSinceEpoch - startMs;
-    reactionTimes.add(rt);
+    // Check if this is an odd tile
+    if (oddTileIndices.contains(index)) {
+      // Found an odd tile!
+      if (!foundTiles.contains(index)) {
+        foundTiles.add(index);
+        HapticFeedback.mediumImpact();
 
-    if (index == oddOneIndex) {
-      totalCorrect++;
-      totalPrecision += 1.0;
-      HapticFeedback.mediumImpact();
-      _showFeedback(true);
+        // Update tile to show it's been found (make it slightly transparent or marked)
+        setState(() {
+          // Visual feedback happens in the builder
+        });
+
+        // Check if we found both tiles
+        if (foundTiles.length == 2) {
+          // Found both! End the round
+          _roundTimer?.cancel();
+          final rt = DateTime.now().millisecondsSinceEpoch - startMs;
+          reactionTimes.add(rt);
+
+          // Store per-round data: perfect = found both
+          roundPrecision.add(1.0);
+          roundPerfect.add(true);
+
+          _showFeedback(true);
+        }
+      }
     } else {
+      // Wrong tile - end round immediately
+      _roundTimer?.cancel();
+      final rt = DateTime.now().millisecondsSinceEpoch - startMs;
+      reactionTimes.add(rt);
+
       HapticFeedback.heavyImpact();
+
+      // Calculate precision: 0.0 if none found, 0.5 if found 1, 1.0 if found both
+      double precision = foundTiles.length / 2.0;
+      roundPrecision.add(precision);
+      roundPerfect.add(false);
+
       _showFeedback(false);
     }
   }
-
 
   void _showFeedback(bool correct, {bool isTimeout = false}) {
     setState(() {
@@ -221,14 +288,12 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
 
   Map<String, double> grade() {
     return ColorCascadeGrading.grade(
-      totalCorrect: totalCorrect,
-      totalPrecision: totalPrecision,
-      rounds: 4,
+      roundPerfect: roundPerfect,
+      roundPrecision: roundPrecision,
       reactionTimes: reactionTimes,
       timeoutPenaltyMs: _timeoutPenaltyMs,
     );
   }
-
 
   // --- GENERATORS ---
   List<Color> _generateGradient(ColorBase base, int steps, {double variance = 0.3}) {
@@ -259,6 +324,9 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   @override
   Widget build(BuildContext context) {
     if (isGameOver) {
+      // Calculate accuracy for display
+      int totalCorrect = roundPerfect.where((p) => p).length;
+
       return Scaffold(
         backgroundColor: Colors.black87,
         body: Center(
@@ -272,7 +340,7 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
               Text("Accuracy: ${(totalCorrect / 4 * 100).toInt()}%", style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () { 
+                onPressed: () {
                   HapticFeedback.lightImpact();
                   Navigator.of(context).pop(grade());
                 },
@@ -298,12 +366,12 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
+                  )
               ),
             ),
           ),
@@ -351,7 +419,7 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
               for (int i=0; i<reorderableList.length; i++)
                 Container(
                   key: ValueKey(reorderableList[i]),
-                  height: 60, // Slightly shorter to fit 7 items
+                  height: 60,
                   margin: const EdgeInsets.symmetric(vertical: 4),
                   decoration: BoxDecoration(
                       color: reorderableList[i],
@@ -401,19 +469,32 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
   }
 
   Widget _buildGridLevel() {
-    int crossAxis = 4; // Default 4x4
-    if (level == 2) crossAxis = 5; // 5x5
-    if (level == 3) crossAxis = 6; // 6x6
+    int crossAxis = 4;
+    if (level == 2) crossAxis = 5;
+    if (level == 3) crossAxis = 6;
 
-    String title = "Find the ODD Color!";
-    if (level == 2) title = "EXPERT: Find the odd one";
-    if (level == 3) title = "MASTER: Good luck.";
+    String title = "Find 2 ODD Colors!";
+    if (level == 2) title = "EXPERT: Find both odd ones";
+    if (level == 3) title = "MASTER: Find 2. Good luck.";
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          child: Column(
+            children: [
+              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                "Found: ${foundTiles.length}/2",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: foundTiles.length == 2 ? Colors.green : Colors.grey,
+                ),
+              ),
+            ],
+          ),
         ),
         Expanded(
           child: Center(
@@ -428,13 +509,19 @@ class _ColorCascadeGameState extends State<ColorCascadeGame> {
                 ),
                 itemCount: tiles.length,
                 itemBuilder: (context, i) {
+                  bool isFound = foundTiles.contains(i);
+
                   return GestureDetector(
                     onTap: () => _onGridTap(i),
                     child: Container(
                       decoration: BoxDecoration(
                         color: tiles[i],
                         borderRadius: BorderRadius.circular(4),
+                        border: isFound ? Border.all(color: Colors.greenAccent, width: 3) : null,
                       ),
+                      child: isFound
+                          ? const Icon(Icons.check_circle, color: Colors.white, size: 24)
+                          : null,
                     ),
                   );
                 },

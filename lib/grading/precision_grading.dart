@@ -49,7 +49,7 @@ class PrecisionGrading {
     final visuomotorBase = clamp01(
         0.55 * deviationClamped + 0.45 * offPathClamped
     );
-    final completionBonus = 0.5 + 0.6 * completion;
+    final completionBonus = 0.6 + 0.48 * completion;
     final visuomotorIntegration = clamp01(visuomotorBase * completionBonus);
 
     // Movement Steadiness: Heavily emphasizes staying on-path (80% stability)
@@ -58,11 +58,11 @@ class PrecisionGrading {
         0.20 * deviationClamped + 0.80 * offPathClamped
     );
 
-    print("sum off-rate $sumOffRate");
-    print("sum dev $sumDevNorm");
-    print("fine motor: $fineMotorControl");
-    print("Visuomotor Integration: $visuomotorIntegration");
-    print("Movement Steadiness: $movementSteadiness");
+    // print("sum off-rate $sumOffRate");
+    // print("sum dev $sumDevNorm");
+    // print("fine motor: $fineMotorControl");
+    // print("Visuomotor Integration: $visuomotorIntegration");
+    // print("Movement Steadiness: $movementSteadiness");
 
     return {
       "Fine Motor Control": fineMotorControl,
