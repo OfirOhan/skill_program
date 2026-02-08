@@ -16,30 +16,33 @@ class _RoleplayGameState extends State<RoleplayGame> {
   int index = 0;
   bool isGameOver = false;
 
-  // Timer
+  static const int timePerRound = 25;
+  static const int timeoutPenaltyMs = 25000;
+
   Timer? _roundTimer;
-  int remainingSeconds = 10; // Fast! Instinct reaction.
+  int remainingSeconds = timePerRound;
 
-  // Metrics
   int correctCount = 0;
-  int eqScore = 0;       // Emotional Quotient points
-  int sqScore = 0;       // Social Quotient points (Power dynamics)
-
   Color? feedbackColor;
   String? feedbackText;
 
-  static const int timePerRound = 12;     // keep what you actually use
-  static const int timeoutPenaltyMs = 12000;
-
   int startMs = 0;
   List<int> reactionTimes = [];
-  List<bool> results = []; // true/false per cue index (timeouts = false)
+  List<bool> results = [];
 
   @override
   void initState() {
     super.initState();
     cues = _generateCues();
+    _shuffleOptions(); // Randomize answer positions
     _startRound();
+  }
+
+  // Shuffle options to prevent pattern recognition
+  void _shuffleOptions() {
+    for (var cue in cues) {
+      cue.options.shuffle();
+    }
   }
 
   @override
@@ -74,13 +77,11 @@ class _RoleplayGameState extends State<RoleplayGame> {
     if (isGameOver || feedbackColor != null) return;
     _roundTimer?.cancel();
 
-    // record as a wrong attempt + max-time RT (anti-free-pass)
     reactionTimes.add(timeoutPenaltyMs);
     results.add(false);
 
     _showFeedback(false, "Too Slow!");
   }
-
 
   void _finishGame() {
     _roundTimer?.cancel();
@@ -110,14 +111,13 @@ class _RoleplayGameState extends State<RoleplayGame> {
     }
   }
 
-
   void _showFeedback(bool positive, String text) {
     setState(() {
       feedbackColor = positive ? Colors.green : Colors.red;
       feedbackText = text;
     });
 
-    Future.delayed(const Duration(milliseconds: 1000), () {
+    Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
       setState(() {
         index++;
@@ -126,16 +126,53 @@ class _RoleplayGameState extends State<RoleplayGame> {
     });
   }
 
+  // --- WORD COUNT HELPERS ---
+
+  int _countWords(String s) {
+    final trimmed = s.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).length;
+  }
+
+  int _contextWordCount(SocialCue cue) => _countWords(cue.context);
+
+  int _quoteWordCount(SocialCue cue) => _countWords(cue.quote);
+
+  /// Total words across all answer options for this cue.
+  /// (Grading can give this less weight than context/quote if desired.)
+  int _optionsWordCount(SocialCue cue) {
+    int sum = 0;
+    for (final opt in cue.options) {
+      sum += _countWords(opt.text);
+    }
+    return sum;
+  }
+
   Map<String, double> grade() {
-    List<bool> isSubtext = cues.map((c) => c.type == CueType.subtext).toList();
+    final List<bool> isPragmatic =
+    cues.map((c) => c.type == CueType.pragmatic).toList();
+    final List<bool> isSocialContext =
+    cues.map((c) => c.type == CueType.socialContext).toList();
+
+    // Per-cue word counts (context / quote / options)
+    final List<int> contextWordCounts =
+    cues.map(_contextWordCount).toList();
+    final List<int> quoteWordCounts =
+    cues.map(_quoteWordCount).toList();
+    final List<int> optionsWordCounts =
+    cues.map(_optionsWordCount).toList();
+
     return RoleplayGrading.grade(
       totalCues: cues.length,
       results: results,
       reactionTimes: reactionTimes,
-      isSubtext: isSubtext,
+      isPragmatic: isPragmatic,
+      isSocialContext: isSocialContext,
+      contextWordCounts: contextWordCounts,
+      quoteWordCounts: quoteWordCounts,
+      optionsWordCounts: optionsWordCounts,
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -146,16 +183,27 @@ class _RoleplayGameState extends State<RoleplayGame> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.visibility, color: Colors.purpleAccent, size: 80),
+              const Icon(Icons.visibility,
+                  color: Colors.purpleAccent, size: 80),
               const SizedBox(height: 20),
-              const Text("Subtext Analyzed", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text(
+                "Social Cues Analyzed",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 10),
-              Text("Accuracy: $correctCount / ${cues.length}", style: const TextStyle(color: Colors.white70, fontSize: 18)),
+              Text(
+                "Accuracy: $correctCount / ${cues.length}",
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 18),
+              ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                onPressed: () { 
-                   HapticFeedback.lightImpact();
-                   Navigator.of(context).pop(grade());
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pop(grade());
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("NEXT GAME"),
@@ -170,8 +218,9 @@ class _RoleplayGameState extends State<RoleplayGame> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Read the Room"),
-        backgroundColor: Colors.transparent,
+        title: const Text("Read the Room",
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: const Color(0xFFF8F9FA),
         foregroundColor: const Color(0xFF2D3436),
         elevation: 0,
         centerTitle: true,
@@ -179,18 +228,31 @@ class _RoleplayGameState extends State<RoleplayGame> {
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 20.0),
-              child: Text(
-                "$remainingSeconds s",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: remainingSeconds <= 5 ? Colors.red : Colors.indigo
-                )
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: remainingSeconds <= 5
+                      ? const Color(0xFFFFEBEE)
+                      : const Color(0xFFE8EAF6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  "$remainingSeconds s",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: remainingSeconds <= 5
+                        ? const Color(0xFFD32F2F)
+                        : const Color(0xFF5C6BC0),
+                  ),
+                ),
               ),
             ),
           ),
         ],
       ),
+      backgroundColor: const Color(0xFFF8F9FA),
       body: Stack(
         children: [
           Padding(
@@ -198,79 +260,186 @@ class _RoleplayGameState extends State<RoleplayGame> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Spacer(),
+                const SizedBox(height: 20),
 
-                // 1. THE QUOTE (Big)
+                // Progress indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "${index + 1} / ${cues.length}",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF78909C),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // CONTEXT BOX
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFE8EAF6), Color(0xFFF3E5F5)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.format_quote, color: Colors.grey, size: 40),
-                      Text(
-                        cue.quote,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.black87),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.lightbulb_outline,
+                              color: Color(0xFF5C6BC0),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            "Situation",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF5C6BC0),
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
+                      Text(
+                        cue.context,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          height: 1.5,
+                          color: Color(0xFF37474F),
+                        ),
+                      ),
                     ],
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                // 2. THE CONTEXT (The Key)
+                // THE QUOTE
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                      color: Colors.indigo[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.indigo[100]!)
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: const Color(0xFFE0E0E0), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
                   ),
-                  child: RichText(
-                    textAlign: TextAlign.center,
-                    text: TextSpan(
-                        style: const TextStyle(color: Colors.black87, fontSize: 16),
-                        children: [
-                          const TextSpan(text: "CONTEXT: ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
-                          TextSpan(text: cue.context),
-                        ]
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        cue.hasVisual
+                            ? Icons.emoji_emotions_outlined
+                            : Icons.format_quote,
+                        color: const Color(0xFF9E9E9E),
+                        size: 32,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        cue.quote,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF212121),
+                          height: 1.4,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
                 const Spacer(),
-                const Text("What is the TRUE intent?", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
 
-                // 3. OPTIONS
+                Text(
+                  cue.type == CueType.pragmatic
+                      ? "What do they really mean?"
+                      : "What's the real signal here?",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF78909C),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // OPTIONS
                 ...List.generate(cue.options.length, (i) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12.0),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: () => _onOptionSelected(i),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black87,
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          cue.options[i].text,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _onOptionSelected(i),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 18, horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: const Color(0xFFE0E0E0),
+                                width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                Colors.black.withOpacity(0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              )
+                            ],
+                          ),
+                          child: Text(
+                            cue.options[i].text,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF424242),
+                              height: 1.3,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   );
                 }),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
               ],
             ),
           ),
@@ -282,9 +451,22 @@ class _RoleplayGameState extends State<RoleplayGame> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(feedbackColor == Colors.green ? Icons.check_circle : Icons.warning, color: Colors.white, size: 80),
+                    Icon(
+                      feedbackColor == Colors.green
+                          ? Icons.check_circle
+                          : Icons.warning,
+                      color: Colors.white,
+                      size: 80,
+                    ),
                     const SizedBox(height: 20),
-                    Text(feedbackText!, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                    Text(
+                      feedbackText!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -297,7 +479,10 @@ class _RoleplayGameState extends State<RoleplayGame> {
 
 // --- DATA MODELS ---
 
-enum CueType { subtext, power, cultural }
+enum CueType {
+  pragmatic, // Linguistic: what they MEAN vs what they SAY
+  socialContext, // Situational: WHO/WHERE/WHEN determines meaning
+}
 
 class CueOption {
   final String text;
@@ -310,76 +495,203 @@ class SocialCue {
   final String quote;
   final String context;
   final List<CueOption> options;
-  SocialCue(this.type, this.quote, this.context, this.options);
+  final bool hasVisual; // For future: indicates if this uses emoji/images
+
+  SocialCue(
+      this.type,
+      this.quote,
+      this.context,
+      this.options, {
+        this.hasVisual = false,
+      });
 }
 
-// --- HARD CONTENT GENERATOR ---
+// --- CONTENT GENERATOR ---
+/// Cues are ordered to create a difficulty ramp:
+/// 1–4: Pragmatics (easiest → hardest)
+/// 5–8: Social Context (easiest → hardest)
 List<SocialCue> _generateCues() {
   return [
-    // 1. Passive Aggression (Workplace)
+    // ================= PRAGMATIC CUES (1–4) =================
+
+    // 1. Mild sarcasm about lateness (EASY)
     SocialCue(
-        CueType.subtext,
-        "I guess that's one way to do it.",
-        "A senior colleague says this after you present your new strategy.",
-        [
-          CueOption("Endorsement", false),
-          CueOption("Confusion", false),
-          CueOption("Disapproval", true), // Correct: "I guess" + "one way" = subtle insult
-          CueOption("Indifference", false),
-        ]
+      CueType.pragmatic,
+      "Thanks for finally replying.",
+      "A close friend messages you after you answered them many hours late.",
+      [
+        CueOption(
+          "They're a bit annoyed but also glad you're responding now.",
+          true,
+        ),
+        CueOption(
+          "They're genuinely relieved and unbothered by the delay.",
+          false,
+        ),
+        CueOption(
+          "They're seriously hurt and reconsidering the friendship.",
+          false,
+        ),
+      ],
+      hasVisual: false,
     ),
 
-    // 2. The Double Bind (Relationship)
+    // 2. "Interesting choice" about appearance (EASY–MEDIUM)
     SocialCue(
-        CueType.subtext,
-        "Do whatever you want.",
-        "Partner says this abruptly and turns away during an argument.",
-        [
-          CueOption("Permission", false),
-          CueOption("A Test / Trap", true), // Correct: They want you to choose THEM, not the thing
-          CueOption("Fatigue", false),
-          CueOption("Agreement", false),
-        ]
+      CueType.pragmatic,
+      "That's… an interesting choice.",
+      "You show a new outfit to a friend who pauses before saying this.",
+      [
+        CueOption(
+          "They think it's odd or risky and avoid calling it bad directly.",
+          true,
+        ),
+        CueOption(
+          "They're genuinely intrigued and trying to form an opinion.",
+          false,
+        ),
+        CueOption(
+          "They think it's bold in a good way but wouldn't wear it themselves.",
+          false,
+        ),
+      ],
+      hasVisual: false,
     ),
 
-    // 3. Power Dynamics (Boss)
+    // 3. Reluctant agreement (MEDIUM)
     SocialCue(
-        CueType.power,
-        "I'm sure you did your best.",
-        "Your perfectionist boss says this after reviewing a project that missed targets.",
-        [
-          CueOption("Consolation", false),
-          CueOption("Condescension", true), // Correct: "Your best wasn't good enough"
-          CueOption("Gratitude", false),
-          CueOption("Pride", false),
-        ]
+      CueType.pragmatic,
+      "I mean… if you really want to.",
+      "You ask a friend if they're okay with you joining plans they made with others.",
+      [
+        CueOption(
+          "They feel pressured to say yes and would actually prefer you not join.",
+          true,
+        ),
+        CueOption(
+          "They're fine with it but want to make sure you're genuinely interested.",
+          false,
+        ),
+        CueOption(
+          "They genuinely don't mind either way and want you to decide for yourself.",
+          false,
+        ),
+      ],
+      hasVisual: false,
     ),
 
-    // 4. Damage Control / De-escalation (REPLACED)
-    // Logic: Public arguments are bad. "Offline" means "Stop talking now."
+    // 4. Delegating a hard call (HARDEST PRAGMATIC)
     SocialCue(
-        CueType.power,
-        "Let's take this offline.",
-        "A manager interrupts you during a heated debate in a team meeting.",
-        [
-          CueOption("Schedule a later meeting", false), // Literal interpretation (Naive)
-          CueOption("Stop the public argument", true), // Correct: Immediate de-escalation
-          CueOption("They are interested", false),
-          CueOption("Agreement", false),
-        ]
+      CueType.pragmatic,
+      "Do what you think is best.",
+      "You ask your manager whether to take a risky shortcut on an important project.",
+      [
+        CueOption(
+          "They're avoiding clear guidance so the outcome rests mostly on you.",
+          true,
+        ),
+        CueOption(
+          "They trust your expertise and will fully support whatever you decide.",
+          false,
+        ),
+        CueOption(
+          "They want you to think it through more deeply before asking again.",
+          false,
+        ),
+      ],
+      hasVisual: false,
     ),
 
-    // 5. Deflection (Social)
+    // ================ SOCIAL CONTEXT CUES (5–8) ================
+
+    // 5. Casual celebration (EASY, positive)
     SocialCue(
-        CueType.subtext,
-        "Wow, you're so brave for wearing that.",
-        "An acquaintance says this at a formal dinner.",
-        [
-          CueOption("Compliment", false),
-          CueOption("Insult / Judgment", true), // Correct: "Brave" implies it breaks norms negatively
-          CueOption("Envy", false),
-          CueOption("Support", false),
-        ]
+      CueType.socialContext,
+      "We should grab coffee sometime.",
+      "After you help with a tricky task, a coworker smiles and says this.",
+      [
+        CueOption(
+          "They appreciate your help and want a friendly one-on-one to connect.",
+          true,
+        ),
+        CueOption(
+          "They're just being polite and don't really plan to follow up.",
+          false,
+        ),
+        CueOption(
+          "They want to discuss work concerns in a more private setting.",
+          false,
+        ),
+      ],
+      hasVisual: false,
+    ),
+
+    // 6. Words vs body language (EASY–MEDIUM)
+    SocialCue(
+      CueType.socialContext,
+      "I'm totally fine with it. 😊",
+      "After you change a plan they cared about, your colleague looks tense and avoids eye contact.",
+      [
+        CueOption(
+          "They're not actually okay but don't feel safe saying so directly.",
+          true,
+        ),
+        CueOption(
+          "They're fine with the change; the tense look is about something else entirely.",
+          false,
+        ),
+        CueOption(
+          "They're adapting to the change and the tension will pass quickly.",
+          false,
+        ),
+      ],
+      hasVisual: true,
+    ),
+
+    // 7. Stopping conflict in the room (MEDIUM–HARD)
+    SocialCue(
+      CueType.socialContext,
+      "Let's talk after this.",
+      "In a team meeting, you challenge your manager's idea. They cut you off and say this.",
+      [
+        CueOption(
+          "They want to stop the clash in front of everyone and handle it privately later.",
+          true,
+        ),
+        CueOption(
+          "They're genuinely interested but the meeting isn't the right venue for deep discussion.",
+          false,
+        ),
+        CueOption(
+          "They need time to consider your point and want to revisit with fresh perspective.",
+          false,
+        ),
+      ],
+      hasVisual: false,
+    ),
+
+    // 8. First-draft evaluation vs peers (HARDEST SOCIAL)
+    SocialCue(
+      CueType.socialContext,
+      "For now, this will do.",
+      "You show a first draft to your supervisor. Peers just got strong praise on their work.",
+      [
+        CueOption(
+          "They find it acceptable for the moment but expect stronger work or revisions later.",
+          true,
+        ),
+        CueOption(
+          "They're being pragmatic about deadlines and think it's good enough to move forward.",
+          false,
+        ),
+        CueOption(
+          "Your work is different in scope, so direct comparison to peers isn't relevant here.",
+          false,
+        ),
+      ],
+      hasVisual: false,
     ),
   ];
 }
+
+

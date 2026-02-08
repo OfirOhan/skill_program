@@ -2,507 +2,686 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/grading/beat_buddy_grading.dart';
 // test/grading/beat_buddy_grading_test.dart
 
-
 void main() {
-  group('BeatBuddyGrading -', () {
+  group('BeatBuddyGrading', () {
+    const eps = 0.05;
 
-    // ==========================================
-    // PITCH MATCHING TESTS
-    // ==========================================
+    bool closeTo(double actual, double expected, double epsilon) {
+      return (actual - expected).abs() <= epsilon;
+    }
 
-    group('Pitch Matching -', () {
+    // =========================================================================
+    // BEHAVIORAL SCENARIOS
+    // =========================================================================
 
-      test('perfect pitch matching (0 cents error) scores 1.00', () {
+    group('Behavioral Scenarios', () {
+      test('1. Perfect performance - both skills maxed', () {
         final result = BeatBuddyGrading.grade(
           pitchErrorsCents: [0.0, 0.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(1.00, 0.05));
-      });
-
-      test('excellent pitch matching (5-15 cents avg) scores ~0.97-0.99', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [10.0, 12.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.98, 0.05));
-      });
-
-      test('very good pitch matching (20-25 cents avg) scores ~0.95-0.96', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [22.0, 24.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.95, 0.05));
-      });
-
-      test('good pitch matching (35-45 cents avg) scores ~0.85-0.88', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [38.0, 42.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.86, 0.05));
-      });
-
-      test('average pitch matching (70-80 cents avg) scores ~0.62-0.68', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [72.0, 78.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.65, 0.05));
-      });
-
-      test('below average pitch matching (120-150 cents avg) scores ~0.35-0.44', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [125.0, 145.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.39, 0.05));
-      });
-
-      test('poor pitch matching (200+ cents avg) scores <0.20', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [210.0, 220.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], lessThan(0.20));
-      });
-
-      test('very poor pitch matching (300+ cents = semitone) scores ~0.00', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [310.0, 320.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.00, 0.05));
-      });
-
-      test('wildly inconsistent performance averages out correctly', () {
-        // One perfect, one terrible - should average to moderate score
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [5.0, 200.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        // Average: 102.5 cents -> should be in below average range
-        expect(result["Auditory Pitch/Tone"], closeTo(0.49, 0.05));
-      });
-
-      test('single trial performance is evaluated correctly', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [50.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.80, 0.05));
-      });
-
-      test('no pitch trials attempted scores 0.00', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], equals(0.00));
-      });
-    });
-
-    // ==========================================
-    // RHYTHM DISCRIMINATION TESTS
-    // ==========================================
-
-    group('Rhythm Discrimination -', () {
-
-      test('perfect rhythm discrimination (5/5) scores 1.00', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
           rhythmCorrect: 5,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(1.00));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 1.00, eps), true,
+            reason: 'Perfect pitch matching should be 1.0');
+        expect(result['Auditory Rhythm']!, equals(1.00),
+            reason: 'Perfect rhythm discrimination should be 1.0');
       });
 
-      test('excellent rhythm discrimination (4/5) scores 0.80', () {
+      test('2. Musical person - good pitch, good rhythm', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
+          pitchErrorsCents: [18.0, 25.0], // ~21.5 cents avg
           rhythmCorrect: 4,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(0.80));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.84, eps), true,
+            reason: 'Good pitch matching should score ~0.84');
+        expect(result['Auditory Rhythm']!, equals(0.80),
+            reason: '4/5 rhythm should be 0.80');
       });
 
-      test('good rhythm discrimination (3/5) scores 0.60', () {
+      test('3. Average adult - typical performance', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
+          pitchErrorsCents: [65.0, 75.0], // ~70 cents avg
           rhythmCorrect: 3,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(0.60));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: '70 cents avg should map to exactly 0.50');
+        expect(result['Auditory Rhythm']!, equals(0.60),
+            reason: '3/5 rhythm is average performance');
       });
 
-      test('below average rhythm discrimination (2/5) scores 0.40', () {
+      test('4. Tone-deaf person - poor pitch, intact rhythm', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
+          pitchErrorsCents: [195.0, 215.0], // ~205 cents avg
+          rhythmCorrect: 4,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.06, eps), true,
+            reason: 'Tone-deaf range should score very low');
+        expect(result['Auditory Rhythm']!, equals(0.80),
+            reason: 'Rhythm can be intact despite pitch deficit');
+      });
+
+      test('5. Rushed player - inconsistent pitch, poor rhythm', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [110.0, 130.0], // ~120 cents avg
           rhythmCorrect: 2,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(0.40));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.25, eps), true,
+            reason: 'Below average pitch should score ~0.25');
+        expect(result['Auditory Rhythm']!, equals(0.40),
+            reason: '2/5 rhythm is below average');
       });
 
-      test('poor rhythm discrimination (1/5) scores 0.20', () {
+      test('6. Lucky guesser - poor pitch, random rhythm success', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
-          rhythmCorrect: 1,
+          pitchErrorsCents: [140.0, 160.0], // ~150 cents avg
+          rhythmCorrect: 3,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(0.20));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.16, eps), true,
+            reason: 'Poor pitch perception should score low');
+        expect(result['Auditory Rhythm']!, equals(0.60),
+            reason: '60% is slightly above chance (50%)');
       });
 
-      test('no correct rhythm discrimination (0/5) scores 0.00', () {
+      test('7. Early quit - player stops after 3 rhythm trials', () {
+        // Player quit early: finished both pitch rounds, only 3/5 rhythm trials
+        // The 2 unfinished rhythm trials count as WRONG (0 points)
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
+          pitchErrorsCents: [70.0, 70.0], // Completed both pitch rounds
+          rhythmCorrect: 2,
+          rhythmTotal: 5, // All 5 trials happened (last 2 timed out = wrong)
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: 'Average pitch performance');
+        expect(result['Auditory Rhythm']!, equals(0.40),
+            reason: 'Got 2/5 correct (3 answered, 2 correct, then quit = 2 timeouts)');
+      });
+
+      test('7b. Pitch timeout - slider left at default', () {
+        // Timer ran out, slider never moved from 440 Hz default
+        // Target was 500 Hz → error = ~225 cents
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [225.0, 225.0], // Both rounds timed out at default
           rhythmCorrect: 0,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Rhythm"], equals(0.00));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.04, eps), true,
+            reason: 'Timeout with default slider should score very poorly');
+        expect(result['Auditory Rhythm']!, equals(0.00),
+            reason: 'No rhythm answers given');
       });
 
-      test('no rhythm trials attempted scores 0.00', () {
+      test('7c. Rhythm timeout - no answer given', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [0.0],
+          pitchErrorsCents: [70.0, 70.0],
           rhythmCorrect: 0,
-          rhythmTotal: 0,
+          rhythmTotal: 5, // All 5 trials timed out
         );
-        expect(result["Auditory Rhythm"], equals(0.00));
-      });
-    });
 
-    // ==========================================
-    // SKILL INDEPENDENCE TESTS
-    // ==========================================
-
-    group('Skill Independence -', () {
-
-      test('excellent pitch with poor rhythm shows independent scoring', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [8.0, 12.0], // ~10 cents avg = excellent
-          rhythmCorrect: 1,
-          rhythmTotal: 5, // 20% = poor
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.98, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.20));
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: 'Pitch unaffected by rhythm timeout');
+        expect(result['Auditory Rhythm']!, equals(0.00),
+            reason: 'All rhythm timeouts count as wrong (0/5)');
       });
 
-      test('poor pitch with excellent rhythm shows independent scoring', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [180.0, 220.0], // ~200 cents avg = poor
-          rhythmCorrect: 5,
-          rhythmTotal: 5, // 100% = perfect
-        );
-        expect(result["Auditory Pitch/Tone"], lessThan(0.25));
-        expect(result["Auditory Rhythm"], equals(1.00));
-      });
-
-      test('both skills can be average independently', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [70.0, 80.0], // ~75 cents avg = average
-          rhythmCorrect: 3,
-          rhythmTotal: 5, // 60% = average
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.65, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.60));
-      });
-
-      test('both skills can be excellent independently', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [5.0, 8.0], // ~6.5 cents avg = excellent
-          rhythmCorrect: 5,
-          rhythmTotal: 5, // 100% = perfect
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.99, 0.05));
-        expect(result["Auditory Rhythm"], equals(1.00));
-      });
-    });
-
-    // ==========================================
-    // REALISTIC GAME SCENARIO TESTS
-    // ==========================================
-
-    group('Realistic Game Scenarios -', () {
-
-      test('musical person: good pitch, good rhythm', () {
-        // Someone with musical training
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [15.0, 20.0], // ~17.5 cents avg
-          rhythmCorrect: 4,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.97, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.80));
-      });
-
-      test('non-musical person: average pitch, average rhythm', () {
-        // Typical adult with no musical training
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [85.0, 95.0], // ~90 cents avg
-          rhythmCorrect: 3,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.56, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.60));
-      });
-
-      test('tone-deaf person: poor pitch, but can still detect rhythm', () {
-        // Pitch perception deficit but intact rhythm
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [240.0, 280.0], // ~260 cents avg
-          rhythmCorrect: 4,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.08, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.80));
-      });
-
-      test('rushed player: inconsistent pitch, missed some rhythm', () {
-        // Someone rushing through without careful listening
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [120.0, 140.0], // ~130 cents avg
-          rhythmCorrect: 2,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.41, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.40));
-      });
-
-      test('lucky guesser in rhythm section', () {
-        // Poor pitch, got rhythm by chance (~50% would be pure guessing)
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [150.0, 170.0], // ~160 cents avg
-          rhythmCorrect: 3,
-          rhythmTotal: 5, // 60% - slightly above chance
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.32, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.60));
-      });
-
-      test('timeout scenario: some trials completed, others skipped', () {
-        // Player ran out of time mid-game
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [50.0], // Only completed 1 pitch trial
-          rhythmCorrect: 2,
-          rhythmTotal: 3, // Only completed 3/5 rhythm trials
-        );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.80, 0.05));
-        expect(result["Auditory Rhythm"], closeTo(0.67, 0.05));
-      });
-
-      test('perfectionist: took time, excellent on both', () {
-        // Someone who carefully matched everything
+      test('10. Perfectionist - excellent on both', () {
         final result = BeatBuddyGrading.grade(
           pitchErrorsCents: [3.0, 7.0], // ~5 cents avg
           rhythmCorrect: 5,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Pitch/Tone"], closeTo(0.99, 0.05));
-        expect(result["Auditory Rhythm"], equals(1.00));
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.97, eps), true,
+            reason: 'Expert-level pitch should score ~0.97');
+        expect(result['Auditory Rhythm']!, equals(1.00),
+            reason: 'Perfect rhythm discrimination');
       });
 
-      test('beginner who improved during game', () {
-        // Started poorly, got better with practice
+      test('11. Beginner who improved - learning curve', () {
         final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [150.0, 60.0], // Improved from 150 to 60 cents
-          rhythmCorrect: 3,
-          rhythmTotal: 5, // Got better at detecting patterns
-        );
-        // Average of 105 cents
-        expect(result["Auditory Pitch/Tone"], closeTo(0.48, 0.05));
-        expect(result["Auditory Rhythm"], equals(0.60));
-      });
-    });
-
-    // ==========================================
-    // EDGE CASES & BOUNDARY CONDITIONS
-    // ==========================================
-
-    group('Edge Cases -', () {
-
-      test('maximum possible pitch error (800 Hz range = ~600 cents) scores 0.00', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [600.0, 600.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result["Auditory Pitch/Tone"], equals(0.00));
-      });
-
-      test('boundary at 25 cents (transition from excellent to good)', () {
-        final result1 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [24.0, 24.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        final result2 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [26.0, 26.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result1["Auditory Pitch/Tone"]! - result2["Auditory Pitch/Tone"]!, lessThan(0.02));
-      });
-
-      test('boundary at 50 cents (transition from good to average)', () {
-        final result1 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [49.0, 49.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        final result2 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [51.0, 51.0],
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        expect(result1["Auditory Pitch/Tone"]! - result2["Auditory Pitch/Tone"]!, lessThan(0.02));
-      });
-
-      test('scores are properly rounded to 2 decimal places', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [33.3333, 33.3333],
-          rhythmCorrect: 1,
-          rhythmTotal: 3,
-        );
-        // Check that scores have exactly 2 decimal places
-        expect(result["Auditory Pitch/Tone"].toString().split('.')[1].length, lessThanOrEqualTo(2));
-        expect(result["Auditory Rhythm"].toString().split('.')[1].length, lessThanOrEqualTo(2));
-      });
-
-      test('all skills present in output map', () {
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [50.0],
+          pitchErrorsCents: [120.0, 50.0], // Improved from 120 to 50
           rhythmCorrect: 3,
           rhythmTotal: 5,
         );
-        expect(result.keys.length, equals(2));
-        expect(result.containsKey("Auditory Pitch/Tone"), isTrue);
-        expect(result.containsKey("Auditory Rhythm"), isTrue);
+
+        // Average = 85 cents
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.40, eps), true,
+            reason: '85 cents avg should be in average-low range');
+        expect(result['Auditory Rhythm']!, equals(0.60),
+            reason: 'Got better at detecting patterns');
       });
 
-      test('scores never exceed 1.00', () {
+      test('12. Complete failure - no discrimination shown', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [310.0, 320.0], // ~315 cents (>3 semitones)
+          rhythmCorrect: 0,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.00, eps), true,
+            reason: 'Extreme pitch error should score 0.00');
+        expect(result['Auditory Rhythm']!, equals(0.00),
+            reason: 'No correct rhythm discrimination');
+      });
+
+      test('13. Excellent pitch with poor rhythm', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [8.0, 12.0], // ~10 cents avg
+          rhythmCorrect: 1,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.93, eps), true,
+            reason: 'Expert pitch matching should score high');
+        expect(result['Auditory Rhythm']!, equals(0.20),
+            reason: 'Skills are independent - pitch doesn\'t help rhythm');
+      });
+
+      test('14. Poor pitch with excellent rhythm', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [190.0, 210.0], // ~200 cents avg
+          rhythmCorrect: 5,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.07, eps), true,
+            reason: 'Poor pitch perception despite good rhythm');
+        expect(result['Auditory Rhythm']!, equals(1.00),
+            reason: 'Skills are independent - rhythm doesn\'t need pitch');
+      });
+
+      test('15. Both skills average independently', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [68.0, 72.0], // ~70 cents avg
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: 'Average pitch performance');
+        expect(result['Auditory Rhythm']!, equals(0.60),
+            reason: 'Average rhythm performance');
+      });
+
+      test('16. Wildly inconsistent pitch performance', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [5.0, 155.0], // One perfect, one terrible
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        // Average = 80 cents
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.43, eps), true,
+            reason: 'Inconsistency averages to moderate score');
+        expect(result['Auditory Rhythm']!, equals(0.60),
+            reason: 'Rhythm unaffected by pitch inconsistency');
+      });
+    });
+
+    // =========================================================================
+    // PITCH SCORING CURVE VERIFICATION
+    // =========================================================================
+
+    group('Pitch Scoring Curve', () {
+      test('17. Perfect pitch (0 cents) scores 1.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [0.0, 0.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 1.00, eps), true);
+      });
+
+      test('18. Expert range (8-12 cents avg) scores ~0.92-0.95', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [10.0, 12.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.93, eps), true,
+            reason: 'Expert musician level');
+      });
+
+      test('19. Good range (25-35 cents avg) scores ~0.75-0.82', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [28.0, 32.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.78, eps), true,
+            reason: 'Above average pitch perception');
+      });
+
+      test('20. Average range (60-80 cents avg) scores ~0.45-0.55', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [65.0, 75.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: 'Calibration point - 70 cents = 0.50');
+      });
+
+      test('21. Below average (110-140 cents avg) scores ~0.18-0.25', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [120.0, 130.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.23, eps), true,
+            reason: 'Below average pitch discrimination');
+      });
+
+      test('22. Poor range (190-210 cents avg) scores ~0.05-0.09', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [195.0, 205.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.07, eps), true,
+            reason: 'Tone-deaf range');
+      });
+
+      test('23. Very poor (300+ cents) scores 0.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [310.0, 320.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.00, eps), true,
+            reason: 'Beyond 3 semitones = complete failure');
+      });
+
+      test('24. Single pitch trial - game crashed after round 1', () {
+        // Edge case: game crashed/quit after first pitch round
+        // In reality, this shouldn't happen, but testing grading handles it
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0], // Only 1 round before crash
+          rhythmCorrect: 0,
+          rhythmTotal: 5, // Rhythm still happened (all wrong/timeout)
+        );
+
+        expect(closeTo(result['Auditory Pitch/Tone']!, 0.50, eps), true,
+            reason: 'Single 70-cent trial should score 0.50');
+        expect(result['Auditory Rhythm']!, equals(0.00),
+            reason: 'All rhythm trials timed out');
+      });
+
+      test('25. Maximum possible error (600 cents) scores 0.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [600.0, 600.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Pitch/Tone']!, equals(0.00),
+            reason: 'Beyond reasonable range');
+      });
+    });
+
+    // =========================================================================
+    // RHYTHM SCORING VERIFICATION
+    // =========================================================================
+
+    group('Rhythm Scoring', () {
+      test('26. Perfect rhythm (5/5) scores 1.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 5,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(1.00));
+      });
+
+      test('27. Excellent rhythm (4/5) scores 0.80', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 4,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.80));
+      });
+
+      test('28. Good rhythm (3/5) scores 0.60', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.60));
+      });
+
+      test('29. Below average rhythm (2/5) scores 0.40', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 2,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.40),
+            reason: 'Approaching random guessing territory');
+      });
+
+      test('30. Poor rhythm (1/5) scores 0.20', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 1,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.20));
+      });
+
+      test('31. No rhythm discrimination (0/5) scores 0.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 0,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.00));
+      });
+
+      test('32. Game crashed before rhythm stage', () {
+        // Edge case: game crashed after pitch but before rhythm started
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [70.0, 70.0],
+          rhythmCorrect: 0,
+          rhythmTotal: 0, // Rhythm stage never started
+        );
+
+        expect(result['Auditory Rhythm']!, equals(0.00),
+            reason: 'No rhythm data = no score');
+      });
+    });
+
+    // =========================================================================
+    // SKILL ISOLATION TESTS
+    // =========================================================================
+
+    group('Skill Isolation', () {
+      test('33. Pitch and rhythm are independently measurable', () {
+        final excellentPitchPoorRhythm = BeatBuddyGrading.grade(
+          pitchErrorsCents: [8.0, 12.0],
+          rhythmCorrect: 1,
+          rhythmTotal: 5,
+        );
+
+        final poorPitchExcellentRhythm = BeatBuddyGrading.grade(
+          pitchErrorsCents: [190.0, 210.0],
+          rhythmCorrect: 5,
+          rhythmTotal: 5,
+        );
+
+        // These should show clear independence
+        expect(excellentPitchPoorRhythm['Auditory Pitch/Tone']! > 0.90, true);
+        expect(excellentPitchPoorRhythm['Auditory Rhythm']! < 0.30, true);
+
+        expect(poorPitchExcellentRhythm['Auditory Pitch/Tone']! < 0.10, true);
+        expect(poorPitchExcellentRhythm['Auditory Rhythm']! == 1.00, true);
+      });
+
+      test('34. Pitch score monotonically decreases with error', () {
+        final scores = <double>[];
+
+        for (var cents in [0.0, 20.0, 50.0, 80.0, 120.0, 180.0, 250.0]) {
+          final result = BeatBuddyGrading.grade(
+            pitchErrorsCents: [cents, cents],
+            rhythmCorrect: 3,
+            rhythmTotal: 5,
+          );
+          scores.add(result['Auditory Pitch/Tone']!);
+        }
+
+        // Should be strictly decreasing
+        for (int i = 1; i < scores.length; i++) {
+          expect(scores[i] < scores[i-1], true,
+              reason: 'Higher pitch error should always give lower score');
+        }
+      });
+
+      test('35. Rhythm score monotonically increases with correct answers', () {
+        final scores = <double>[];
+
+        for (var correct in [0, 1, 2, 3, 4, 5]) {
+          final result = BeatBuddyGrading.grade(
+            pitchErrorsCents: [70.0, 70.0],
+            rhythmCorrect: correct,
+            rhythmTotal: 5,
+          );
+          scores.add(result['Auditory Rhythm']!);
+        }
+
+        // Should be strictly increasing
+        for (int i = 1; i < scores.length; i++) {
+          expect(scores[i] > scores[i-1], true,
+              reason: 'More correct answers should give higher score');
+        }
+      });
+
+      test('36. Pitch is purely perceptual - no order effects', () {
+        final result1 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [30.0, 110.0], // Good then bad
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        final result2 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [110.0, 30.0], // Bad then good
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result1['Auditory Pitch/Tone']!, equals(result2['Auditory Pitch/Tone']!),
+            reason: 'Order of pitch errors should not matter');
+      });
+    });
+
+    // =========================================================================
+    // BOUNDARY CONDITIONS
+    // =========================================================================
+
+    group('Boundary Conditions', () {
+      test('37. Boundary at 15 cents (expert → good transition)', () {
+        final result1 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [14.0, 14.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        final result2 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [16.0, 16.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result1['Auditory Pitch/Tone']! - result2['Auditory Pitch/Tone']!, lessThan(0.03),
+            reason: 'Smooth transition at boundary');
+      });
+
+      test('38. Boundary at 40 cents (good → average transition)', () {
+        final result1 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [39.0, 39.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        final result2 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [41.0, 41.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result1['Auditory Pitch/Tone']! - result2['Auditory Pitch/Tone']!, lessThan(0.03),
+            reason: 'Smooth transition at boundary');
+      });
+
+      test('39. Boundary at 100 cents (average → below average transition)', () {
+        final result1 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [99.0, 99.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        final result2 = BeatBuddyGrading.grade(
+          pitchErrorsCents: [101.0, 101.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result1['Auditory Pitch/Tone']! - result2['Auditory Pitch/Tone']!, lessThan(0.02),
+            reason: 'Smooth transition at boundary');
+      });
+
+      test('40. Scores rounded to 2 decimal places', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [33.3333, 33.3333],
+          rhythmCorrect: 2,
+          rhythmTotal: 5,
+        );
+
+        // Check formatting
+        expect(result['Auditory Pitch/Tone'].toString().split('.')[1].length, lessThanOrEqualTo(2));
+        expect(result['Auditory Rhythm'].toString().split('.')[1].length, lessThanOrEqualTo(2));
+      });
+    });
+
+    // =========================================================================
+    // EDGE CASES
+    // =========================================================================
+
+    group('Edge Cases', () {
+      test('41. Empty pitch data returns zeros', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [],
+          rhythmCorrect: 0,
+          rhythmTotal: 0,
+        );
+
+        expect(result['Auditory Pitch/Tone']!, equals(0.0));
+        expect(result['Auditory Rhythm']!, equals(0.0));
+      });
+
+      test('42. All scores clamped to [0, 1] range', () {
         final result = BeatBuddyGrading.grade(
           pitchErrorsCents: [0.0, 0.0],
           rhythmCorrect: 5,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Pitch/Tone"], lessThanOrEqualTo(1.00));
-        expect(result["Auditory Rhythm"], lessThanOrEqualTo(1.00));
+
+        result.forEach((skill, score) {
+          expect(score >= 0.0 && score <= 1.0, true,
+              reason: '$skill score should be in [0,1] range');
+        });
       });
 
-      test('scores never go below 0.00', () {
+      test('43. Scores never exceed 1.00', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [0.0, 0.0],
+          rhythmCorrect: 5,
+          rhythmTotal: 5,
+        );
+
+        expect(result['Auditory Pitch/Tone']!, lessThanOrEqualTo(1.00));
+        expect(result['Auditory Rhythm']!, lessThanOrEqualTo(1.00));
+      });
+
+      test('44. Scores never go below 0.00', () {
         final result = BeatBuddyGrading.grade(
           pitchErrorsCents: [1000.0, 1000.0],
           rhythmCorrect: 0,
           rhythmTotal: 5,
         );
-        expect(result["Auditory Pitch/Tone"], greaterThanOrEqualTo(0.00));
-        expect(result["Auditory Rhythm"], greaterThanOrEqualTo(0.00));
+
+        expect(result['Auditory Pitch/Tone']!, greaterThanOrEqualTo(0.00));
+        expect(result['Auditory Rhythm']!, greaterThanOrEqualTo(0.00));
+      });
+
+      test('45. All skills present in output map', () {
+        final result = BeatBuddyGrading.grade(
+          pitchErrorsCents: [50.0, 50.0],
+          rhythmCorrect: 3,
+          rhythmTotal: 5,
+        );
+
+        expect(result.keys.length, equals(2));
+        expect(result.containsKey('Auditory Pitch/Tone'), isTrue);
+        expect(result.containsKey('Auditory Rhythm'), isTrue);
       });
     });
 
-    // ==========================================
-    // DIFFICULTY CURVE VALIDATION
-    // ==========================================
+    // =========================================================================
+    // SCORE DISTRIBUTION VERIFICATION
+    // =========================================================================
 
-    group('Difficulty Curve Validation -', () {
+    group('Score Distribution', () {
+      test('46. Pitch scores span full 0.0 to 1.0 range appropriately', () {
+        final performances = [
+          [300.0, 300.0],  // Worst
+          [150.0, 150.0],  // Poor
+          [70.0, 70.0],    // Average
+          [30.0, 30.0],    // Good
+          [0.0, 0.0],      // Perfect
+        ];
 
-      test('early rounds (easy) allow for higher rhythm scores', () {
-        // With 300ms and 200ms deltas (rounds 0-1), even average people should score well
-        // This is implicitly tested by the 60% = 3/5 scoring average
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [100.0, 100.0],
-          rhythmCorrect: 3,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Rhythm"], equals(0.60));
-      });
-
-      test('later rounds (hard) make perfect scores meaningful', () {
-        // With 60ms deltas (round 4), 5/5 = truly exceptional temporal discrimination
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [100.0, 100.0],
-          rhythmCorrect: 5,
-          rhythmTotal: 5,
-        );
-        expect(result["Auditory Rhythm"], equals(1.00));
-      });
-
-      test('pitch difficulty is consistent across rounds', () {
-        // Pitch uses random 300-700 Hz range consistently
-        // Both rounds should contribute equally to average
-        final result = BeatBuddyGrading.grade(
-          pitchErrorsCents: [30.0, 90.0], // One good round, one worse round
-          rhythmCorrect: 0,
-          rhythmTotal: 0,
-        );
-        // Average = 60 cents, should be in average range
-        expect(result["Auditory Pitch/Tone"], closeTo(0.74, 0.05));
-      });
-    });
-
-    // ==========================================
-    // COMPARATIVE SCENARIOS
-    // ==========================================
-
-    group('Comparative Scenarios -', () {
-
-      test('better pitch performance yields higher score', () {
-        final result1 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [20.0, 25.0],
-          rhythmCorrect: 3,
-          rhythmTotal: 5,
-        );
-        final result2 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [80.0, 90.0],
-          rhythmCorrect: 3,
-          rhythmTotal: 5,
-        );
-        expect(result1["Auditory Pitch/Tone"]!, greaterThan(result2["Auditory Pitch/Tone"]!));
-      });
-
-      test('better rhythm performance yields higher score', () {
-        final result1 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [50.0, 50.0],
-          rhythmCorrect: 5,
-          rhythmTotal: 5,
-        );
-        final result2 = BeatBuddyGrading.grade(
-          pitchErrorsCents: [50.0, 50.0],
-          rhythmCorrect: 2,
-          rhythmTotal: 5,
-        );
-        expect(result1["Auditory Rhythm"]!, greaterThan(result2["Auditory Rhythm"]!));
-      });
-
-      test('pitch score changes smoothly with performance', () {
-        // Verify no sudden jumps in scoring
-        final scores = <double>[];
-        for (double cents = 0; cents <= 100; cents += 10) {
+        final scores = performances.map((cents) {
           final result = BeatBuddyGrading.grade(
-            pitchErrorsCents: [cents, cents],
+            pitchErrorsCents: cents,
             rhythmCorrect: 0,
             rhythmTotal: 0,
           );
-          scores.add(result["Auditory Pitch/Tone"]!);
+          return result['Auditory Pitch/Tone']!;
+        }).toList();
+
+        // Should be monotonically increasing (less error = higher score)
+        for (int i = 1; i < scores.length; i++) {
+          expect(scores[i] > scores[i-1], true,
+              reason: 'Better pitch performance should yield higher scores');
         }
 
-        // Each score should be less than previous (monotonic decrease)
-        for (int i = 1; i < scores.length; i++) {
-          expect(scores[i], lessThan(scores[i - 1]));
-        }
+        // Should span significant range
+        expect(scores.last - scores.first, greaterThan(0.9),
+            reason: 'Score range should span nearly full 0-1 range');
+      });
+
+      test('47. Rhythm scores span full 0.0 to 1.0 range', () {
+        final performances = [0, 1, 2, 3, 4, 5];
+
+        final scores = performances.map((correct) {
+          final result = BeatBuddyGrading.grade(
+            pitchErrorsCents: [70.0],
+            rhythmCorrect: correct,
+            rhythmTotal: 5,
+          );
+          return result['Auditory Rhythm']!;
+        }).toList();
+
+        // Should span exactly 0.0 to 1.0
+        expect(scores.first, equals(0.0));
+        expect(scores.last, equals(1.0));
+        expect(scores.last - scores.first, equals(1.0));
       });
     });
   });
